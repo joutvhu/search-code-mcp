@@ -1,3 +1,4 @@
+import { runEngineCli } from "./cli/engineManager.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -146,6 +147,12 @@ server.registerTool(
 );
 
 async function main() {
+  const args = process.argv.slice(2);
+  if (args.includes("engine") || args.includes("--engine") || args.includes("doctor")) {
+    await runEngineCli();
+    process.exit(0);
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("code-search-mcp server running on stdio");

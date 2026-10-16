@@ -58,7 +58,8 @@ export async function probeSystemCapabilities(): Promise<SystemCapabilities> {
 }
 
 /**
- * Format an actionable English error message telling the agent exactly what it can call
+ * Format an actionable English error message directing user to run 'code-search-mcp engine'
+ * and providing immediate alternative tools for the AI agent.
  */
 export async function formatMissingEngineError(
   category: "ast" | "text" | "symbol",
@@ -71,11 +72,8 @@ export async function formatMissingEngineError(
     lines.push(
       "[Missing Engine] AST search engine ('ast-grep' or 'sg') is not installed on this system.",
       "",
-      "• User Installation Guide (to enable structural AST features):",
-      "  - npm (recommended): npm install -g @ast-grep/cli",
-      "  - Homebrew (macOS): brew install ast-grep",
-      "  - Cargo: cargo install ast-grep --locked",
-      "  - Windows: choco install ast-grep (or winget install ast-grep)",
+      "• To inspect and interactively install missing engines, run:",
+      "  👉 npx code-search-mcp engine",
       "",
       "• AVAILABLE ALTERNATIVES FOR AI AGENT (Call these directly without re-checking PATH):"
     );
@@ -106,11 +104,8 @@ export async function formatMissingEngineError(
     lines.push(
       "[Missing Engine] No text search engine found ('ripgrep', 'ugrep', or 'git').",
       "",
-      "• User Installation Guide (to enable fast text search):",
-      "  - Windows: winget install BurntSushi.ripgrep.MSVC (or choco install ripgrep)",
-      "  - macOS: brew install ripgrep",
-      "  - Linux: sudo apt install ripgrep (or sudo pacman -S ripgrep)",
-      "  - Git: https://git-scm.com/",
+      "• To inspect and interactively install missing engines, run:",
+      "  👉 npx code-search-mcp engine",
       "",
       "• AVAILABLE ALTERNATIVES FOR AI AGENT (Call these directly without re-checking PATH):"
     );
@@ -133,9 +128,8 @@ export async function formatMissingEngineError(
     lines.push(
       "[Missing Engine] No symbol search engine available ('ctags', 'ast-grep', or 'ripgrep').",
       "",
-      "• User Installation Guide:",
-      "  - Universal Ctags: choco install universal-ctags (or brew install universal-ctags)",
-      "  - ripgrep: winget install BurntSushi.ripgrep.MSVC (or brew install ripgrep)",
+      "• To inspect and interactively install missing engines, run:",
+      "  👉 npx code-search-mcp engine",
       "",
       "• AVAILABLE ALTERNATIVES FOR AI AGENT:",
       '  - list_files({ path: "." })'

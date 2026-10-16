@@ -34,6 +34,18 @@ Designed specifically for AI Coding Agents (**Cursor**, **Claude Desktop**, **An
 
 ## 📦 Prerequisites
 
+### 🔧 Interactive Engine Manager (`code-search-mcp engine`)
+
+Instead of installing binaries manually, you can run the interactive engine CLI to inspect your environment and automatically install missing tools:
+
+```bash
+npx code-search-mcp engine
+```
+
+It automatically detects which text, AST, and symbol engines are installed, and presents an interactive menu to install missing tools (via `npm`, `choco`, `winget`, or `brew`).
+
+
+
 Ensure the following native CLI binaries are installed and accessible in your system `PATH`:
 
 ### 1. ripgrep (`rg`)
