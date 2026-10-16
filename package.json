@@ -8,7 +8,7 @@
     "code-search-mcp": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "node scripts/build.mjs",
     "start": "node dist/index.js",
     "dev": "tsc -w",
     "check": "tsc --noEmit",
@@ -22,7 +22,6 @@
   "devDependencies": {
     "@types/node": "^24.19.2",
     "esbuild": "^0.28.2",
-    "tsup": "^9.0.0",
     "typescript": "^7.0.2"
   },
   "keywords": [
@@ -50,23 +49,5 @@
   ],
   "publishConfig": {
     "access": "public"
-  },
-  "tsup": {
-    "entry": [
-      "src/index.ts"
-    ],
-    "format": [
-      "esm"
-    ],
-    "clean": true,
-    "minify": true,
-    "banner": {
-      "js": "#!/usr/bin/env node\nimport { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
-    },
-    "noExternal": [
-      "@modelcontextprotocol/sdk",
-      "yaml",
-      "zod"
-    ]
   }
 }
