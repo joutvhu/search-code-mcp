@@ -1,3 +1,4 @@
+import { formatMissingEngineError } from "./diagnostics.js";
 import { spawn } from "node:child_process";
 
 export interface ExecResult {
@@ -62,21 +63,8 @@ export async function detectTextEngine(): Promise<ResolvedTextEngine> {
     return cachedTextEngine;
   } catch {}
 
-  const isWin = process.platform === "win32";
-  const isMac = process.platform === "darwin";
-  const installCmd = isWin
-    ? "winget install BurntSushi.ripgrep.MSVC (or 'choco install ripgrep')"
-    : isMac
-    ? "brew install ripgrep"
-    : "sudo apt install ripgrep";
-
-  throw new Error(
-    [
-      "No text search engine found in system PATH (checked: 'rg', 'ugrep', 'git').",
-      `• To install ripgrep (recommended): '${installCmd}'.`,
-      "• Or ensure 'git' is installed and accessible in system PATH.",
-    ].join("\n")
-  );
+  const errorMsg = await formatMissingEngineError("text");
+  throw new Error(errorMsg);
 }
 
 /**
@@ -105,13 +93,8 @@ export async function detectAstEngine(): Promise<ResolvedAstEngine> {
     return cachedAstEngine;
   } catch {}
 
-  throw new Error(
-    [
-      "Binary 'ast-grep' (or alias 'sg') not found in PATH.",
-      "• For AI Agent: Fall back to `type: 'regex'` or `type: 'text'` (powered by ripgrep/git-grep) if you only need string or pattern matching.",
-      "• To enable structural AST features, install ast-grep: 'npm install -g @ast-grep/cli' or 'cargo install ast-grep --locked' or 'brew install ast-grep'.",
-    ].join("\n")
-  );
+  const errorMsg = await formatMissingEngineError("ast");
+  throw new Error(errorMsg);
 }
 
 /**
@@ -153,9 +136,8 @@ export async function detectSymbolEngine(): Promise<ResolvedSymbolEngine> {
     return cachedSymbolEngine;
   } catch {}
 
-  throw new Error(
-    "No symbol or text search engine available in system PATH (checked: 'ctags', 'ast-grep', 'rg', 'git')."
-  );
+  const errorMsg = await formatMissingEngineError("symbol");
+  throw new Error(errorMsg);
 }
 
 export function resolveBinary(name: "rg" | "ast-grep"): string {
