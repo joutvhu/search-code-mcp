@@ -14,6 +14,10 @@ Designed specifically for AI Coding Agents (**Cursor**, **Claude Desktop**, **An
 ## ⚡ Highlights & Key Features
 
 - **5 Unified Tools (Zero Prefix Noise)**: Clean tool names without redundant prefixes: `search`, `replace`, `count`, `dump_tree`, and `list_files`.
+- **Multi-Engine Driver Fallback (Zero Setup Friction)**: Automatically discovers and uses the best available CLI tool on your system without manual configuration:
+  - **Text & Regex**: `ripgrep` (`rg`) ➜ `ugrep` ➜ `git grep` *(runs out of the box on any developer machine with Git installed!)*.
+  - **AST Search**: `ast-grep` ➜ alias `sg`.
+  - **File Listing**: `rg --files` ➜ `git ls-files` ➜ Native Node.js recursive directory walk.
 - **Hybrid 2-Tier Search (`type: "hybrid"`)**: Scans candidate files with ripgrep in ~30ms, then parses AST with ast-grep _only_ on matching files—giving **10x–50x speedups** over pure AST searches on large codebases.
 - **Project-Scoped Pagination Cache (`./.cache/code-search/`)**:
   - Automatically activates only when results exceed your chunk limit.
@@ -294,3 +298,4 @@ npx @modelcontextprotocol/inspector node dist/index.js
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
+

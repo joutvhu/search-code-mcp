@@ -6,41 +6,116 @@ export interface ExecResult {
   exitCode: number;
 }
 
+export type TextEngineName = "rg" | "ugrep" | "git";
+export type AstEngineName = "ast-grep" | "sg";
+
+export interface ResolvedTextEngine {
+  name: TextEngineName;
+  binary: string;
+}
+
+export interface ResolvedAstEngine {
+  name: AstEngineName;
+  binary: string;
+}
+
+let cachedTextEngine: ResolvedTextEngine | null = null;
+let cachedAstEngine: ResolvedAstEngine | null = null;
+
+/**
+ * Detect available text search engine (rg -> ugrep -> git)
+ */
+export async function detectTextEngine(): Promise<ResolvedTextEngine> {
+  if (cachedTextEngine) return cachedTextEngine;
+
+  // 1. Explicit env override
+  if (process.env.RIPGREP_PATH) {
+    cachedTextEngine = { name: "rg", binary: process.env.RIPGREP_PATH };
+    return cachedTextEngine;
+  }
+
+  // 2. Check ripgrep (rg)
+  try {
+    await safeSpawn("rg", ["--version"]);
+    cachedTextEngine = { name: "rg", binary: "rg" };
+    return cachedTextEngine;
+  } catch {}
+
+  // 3. Check ugrep
+  try {
+    await safeSpawn("ugrep", ["--version"]);
+    cachedTextEngine = { name: "ugrep", binary: "ugrep" };
+    return cachedTextEngine;
+  } catch {}
+
+  // 4. Check git (git grep fallback)
+  try {
+    await safeSpawn("git", ["--version"]);
+    cachedTextEngine = { name: "git", binary: "git" };
+    return cachedTextEngine;
+  } catch {}
+
+  const isWin = process.platform === "win32";
+  const isMac = process.platform === "darwin";
+  const installCmd = isWin
+    ? "winget install BurntSushi.ripgrep.MSVC (or 'choco install ripgrep')"
+    : isMac
+    ? "brew install ripgrep"
+    : "sudo apt install ripgrep";
+
+  throw new Error(
+    [
+      "No text search engine found in system PATH (checked: 'rg', 'ugrep', 'git').",
+      `• To install ripgrep (recommended): '${installCmd}'.`,
+      "• Or ensure 'git' is installed and accessible in system PATH.",
+    ].join("\n")
+  );
+}
+
+/**
+ * Detect available AST search engine (ast-grep -> sg)
+ */
+export async function detectAstEngine(): Promise<ResolvedAstEngine> {
+  if (cachedAstEngine) return cachedAstEngine;
+
+  // 1. Explicit env override
+  if (process.env.AST_GREP_PATH) {
+    cachedAstEngine = { name: "ast-grep", binary: process.env.AST_GREP_PATH };
+    return cachedAstEngine;
+  }
+
+  // 2. Check ast-grep
+  try {
+    await safeSpawn("ast-grep", ["--version"]);
+    cachedAstEngine = { name: "ast-grep", binary: "ast-grep" };
+    return cachedAstEngine;
+  } catch {}
+
+  // 3. Check alias 'sg'
+  try {
+    await safeSpawn("sg", ["--version"]);
+    cachedAstEngine = { name: "sg", binary: "sg" };
+    return cachedAstEngine;
+  } catch {}
+
+  throw new Error(
+    [
+      "Binary 'ast-grep' (or alias 'sg') not found in PATH.",
+      "• For AI Agent: Fall back to `type: 'regex'` or `type: 'text'` (powered by ripgrep/git-grep) if you only need string or pattern matching.",
+      "• To enable structural AST features, install ast-grep: 'npm install -g @ast-grep/cli' or 'cargo install ast-grep --locked' or 'brew install ast-grep'.",
+    ].join("\n")
+  );
+}
+
+/**
+ * Legacy resolver for backward compatibility
+ */
 export function resolveBinary(name: "rg" | "ast-grep"): string {
   if (name === "rg") {
     return process.env.RIPGREP_PATH || "rg";
   } else {
     return process.env.AST_GREP_PATH || "ast-grep";
   }
-}
-
-function getInstallHint(binName: string): string {
-  const isWin = process.platform === "win32";
-  const isMac = process.platform === "darwin";
-
-  if (binName.includes("ast-grep")) {
-    return [
-      "Binary 'ast-grep' not found in PATH.",
-      "• For AI Agent: Fall back to `type: 'regex'` or `type: 'text'` (powered by ripgrep) if you only need string or pattern matching.",
-      "• To enable structural AST features, install ast-grep: 'npm install -g @ast-grep/cli' or 'cargo install ast-grep --locked' or 'brew install ast-grep'."
-    ].join("\n");
-  }
-
-  if (binName.includes("rg") || binName.includes("ripgrep")) {
-    const installCmd = isWin
-      ? "winget install BurntSushi.ripgrep.MSVC (or 'choco install ripgrep')"
-      : isMac
-      ? "brew install ripgrep"
-      : "sudo apt install ripgrep";
-
-    return [
-      "Binary 'rg' (ripgrep) not found in PATH.",
-      "• For AI Agent: If ast-grep is installed, you can use `type: 'ast'` to search by AST structure.",
-      `• To install ripgrep: '${installCmd}'.`
-    ].join("\n");
-  }
-
-  return `Binary '${binName}' not found in PATH. Please ensure it is installed and added to system PATH.`;
 }
 
 /**
@@ -54,7 +129,6 @@ export function safeSpawn(
 ): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
     const isWindows = process.platform === "win32";
-
     let targetCmd = executable;
 
     const child = spawn(targetCmd, args, {
@@ -84,14 +158,11 @@ export function safeSpawn(
           safeSpawn(`${targetCmd}.cmd`, args, inputText, cwd)
             .then(resolve)
             .catch(() => {
-              const hint = getInstallHint(executable);
-              reject(new Error(hint));
+              reject(err);
             });
           return;
         }
-
-        const hint = getInstallHint(executable);
-        reject(new Error(hint));
+        reject(err);
       } else {
         reject(err);
       }
@@ -99,7 +170,7 @@ export function safeSpawn(
 
     child.on("close", (code) => {
       const exitCode = code ?? 0;
-      // Exit code 0 (success) and 1 (standard "no matches" from rg/ast-grep) are normal
+      // Exit code 0 (success) and 1 (standard "no matches" from rg/ugrep/git-grep/ast-grep) are normal
       if (exitCode === 0) {
         resolve({ stdout, stderr, exitCode });
       } else if (exitCode === 1) {

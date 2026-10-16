@@ -1,4 +1,4 @@
-import { resolveBinary, safeSpawn } from "../utils/exec.js";
+import { detectAstEngine, safeSpawn } from "../utils/exec.js";
 import { MatchItem } from "../utils/formatters.js";
 import { detectLanguageFromPath, enhanceAstGrepError } from "../utils/validation.js";
 import { SearchParams, ReplaceParams, DumpTreeParams } from "../types.js";
@@ -37,10 +37,10 @@ function parseAstGrepJsonStream(stdout: string): MatchItem[] {
 }
 
 /**
- * Run simple pattern search using ast-grep run
+ * Run simple pattern search using ast-grep run (or sg run)
  */
 export async function runAstGrepPattern(params: Partial<SearchParams>): Promise<MatchItem[]> {
-  const binary = resolveBinary("ast-grep");
+  const { binary } = await detectAstEngine();
   const args: string[] = [...getBaseArgs(), "run", "--pattern", params.query || ""];
 
   // Language resolution
@@ -68,7 +68,7 @@ export async function runAstGrepPattern(params: Partial<SearchParams>): Promise<
  * Run advanced rule search using ast-grep scan --inline-rules
  */
 export async function runAstGrepRule(params: Partial<SearchParams>): Promise<MatchItem[]> {
-  const binary = resolveBinary("ast-grep");
+  const { binary } = await detectAstEngine();
   const args: string[] = [...getBaseArgs(), "scan", "--inline-rules", params.query || ""];
 
   if (params.noIgnore) {
@@ -92,7 +92,7 @@ export async function runAstGrepRule(params: Partial<SearchParams>): Promise<Mat
 export async function runAstGrepRewrite(
   params: ReplaceParams
 ): Promise<{ modifiedFiles: string[]; stdout: string }> {
-  const binary = resolveBinary("ast-grep");
+  const { binary } = await detectAstEngine();
   const args: string[] = [
     ...getBaseArgs(),
     "run",
@@ -111,8 +111,6 @@ export async function runAstGrepRewrite(
     args.push("--no-ignore");
   }
 
-  // If dryRun, use --json to get affected nodes without changing files
-  // If not dryRun, use --update-all to modify files in place
   if (params.dryRun) {
     args.push("--json=stream", params.path || ".");
   } else {
@@ -134,7 +132,7 @@ export async function runAstGrepRewrite(
  * Dump syntax tree for debugging rules
  */
 export async function runAstGrepDump(params: DumpTreeParams): Promise<string> {
-  const binary = resolveBinary("ast-grep");
+  const { binary } = await detectAstEngine();
   const args: string[] = [
     ...getBaseArgs(),
     "run",
