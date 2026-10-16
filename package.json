@@ -8,21 +8,22 @@
     "code-search-mcp": "./dist/index.js"
   },
   "scripts": {
-    "build": "ncc build src/index.ts -m -o dist",
+    "build": "tsup",
     "start": "node dist/index.js",
     "dev": "tsc -w",
     "check": "tsc --noEmit",
     "prepublishOnly": "npm run check && npm run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.6.1",
-    "yaml": "^2.7.0",
-    "zod": "^3.24.1"
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^20.17.0",
-    "@vercel/ncc": "^0.45.0",
-    "typescript": "^5.7.0"
+    "@types/node": "^24.19.2",
+    "esbuild": "^0.28.2",
+    "tsup": "^9.0.0",
+    "typescript": "^7.0.2"
   },
   "keywords": [
     "mcp",
@@ -49,5 +50,23 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "tsup": {
+    "entry": [
+      "src/index.ts"
+    ],
+    "format": [
+      "esm"
+    ],
+    "clean": true,
+    "minify": true,
+    "banner": {
+      "js": "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
+    },
+    "noExternal": [
+      "@modelcontextprotocol/sdk",
+      "yaml",
+      "zod"
+    ]
   }
 }
