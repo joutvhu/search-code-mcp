@@ -32,34 +32,41 @@ Designed specifically for AI Coding Agents (**Cursor**, **Claude Desktop**, **An
 
 ---
 
-## 📦 Prerequisites
+## 📦 Prerequisites & Engine Setup
 
 ### 🔧 Interactive Engine Manager (`code-search-mcp engine`)
 
-Instead of installing binaries manually, you can run the interactive engine CLI to inspect your environment and automatically install missing tools:
+Instead of installing binaries manually, you can run the built-in interactive engine manager to inspect your environment and automatically install missing tools with arrow keys (`↑` / `↓`) and `[Enter]`:
 
 ```bash
 npx code-search-mcp engine
 ```
 
-It automatically detects which text, AST, and symbol engines are installed, and presents an interactive menu to install missing tools (via `npm`, `choco`, `winget`, or `brew`).
+It automatically detects which text, AST, and symbol engines are installed, and presents an interactive selector to install any missing tools (via `npm`, `choco`, `winget`, or `brew`).
 
+---
 
+### Manual Installation (Optional)
 
-Ensure the following native CLI binaries are installed and accessible in your system `PATH`:
+If you prefer to install engines manually, ensure the following CLI binaries are accessible in your system `PATH`:
 
-### 1. ripgrep (`rg`)
-
+#### 1. ripgrep (`rg`) — *Text & Regex Search*
 - **Windows**: `winget install BurntSushi.ripgrep.MSVC` or `choco install ripgrep`
 - **macOS**: `brew install ripgrep`
 - **Linux (Debian/Ubuntu)**: `sudo apt install ripgrep`
 - **Linux (Arch)**: `sudo pacman -S ripgrep`
 
-### 2. ast-grep (`ast-grep`)
-
+#### 2. ast-grep (`ast-grep`) — *Structural AST Search & Refactoring*
 - **npm (Recommended)**: `npm install -g @ast-grep/cli`
 - **macOS**: `brew install ast-grep`
 - **Cargo (Rust)**: `cargo install ast-grep --locked`
+- **Windows**: `choco install ast-grep` or `winget install ast-grep`
+
+#### 3. universal-ctags (`ctags`) — *Symbol Search (Optional)*
+*Note: If ctags is not installed, the server automatically falls back to ripgrep regex heuristics.*
+- **Windows**: `choco install universal-ctags` or `winget install universal-ctags.universal-ctags`
+- **macOS**: `brew install universal-ctags`
+- **Linux (Debian/Ubuntu)**: `sudo apt install universal-ctags`
 
 ---
 
@@ -240,9 +247,6 @@ Count matching occurrences or lines across files without returning match content
 count({ query: "TODO:", type: "text" });
 count({ query: "catch ($ERR) { $$$ }", type: "ast", perFile: true });
 ```
-
----
-
 
 ---
 
