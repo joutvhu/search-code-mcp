@@ -164,7 +164,7 @@ function promptArrowMenu(items: string[]): Promise<number> {
 
 export async function runEngineCli(): Promise<void> {
   console.log("\n=======================================================");
-  console.log("  🔍 Code Search MCP — Engine Status & Manager");
+  console.log("  🔍 Search Code MCP — Engine Status & Manager");
   console.log("=======================================================\n");
 
   const rgVer = checkToolVersion("rg");

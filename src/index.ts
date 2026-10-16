@@ -27,7 +27,7 @@ process.on("SIGTERM", () => {
 });
 
 const server = new McpServer({
-  name: "code-search-mcp",
+  name: "search-code-mcp",
   version: "1.0.0",
 });
 
@@ -155,7 +155,7 @@ async function main() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("code-search-mcp server running on stdio");
+  console.error("search-code-mcp server running on stdio");
 }
 
 main().catch((err) => {

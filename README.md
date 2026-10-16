@@ -1,7 +1,7 @@
-# Code Search MCP
+# Search Code MCP
 
-[![npm version](https://img.shields.io/npm/v/code-search-mcp.svg?style=flat-square&color=CB3837)](https://www.npmjs.com/package/code-search-mcp)
-[![CI](https://github.com/joutvhu/code-search-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/joutvhu/code-search-mcp/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/search-code-mcp.svg?style=flat-square&color=CB3837)](https://www.npmjs.com/package/search-code-mcp)
+[![CI](https://github.com/joutvhu/search-code-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/joutvhu/search-code-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-8A2BE2.svg?style=flat-square)](https://modelcontextprotocol.io/)
 
@@ -34,12 +34,12 @@ Designed specifically for AI Coding Agents (**Cursor**, **Claude Desktop**, **An
 
 ## 📦 Prerequisites & Engine Setup
 
-### 🔧 Interactive Engine Manager (`code-search-mcp engine`)
+### 🔧 Interactive Engine Manager (`search-code-mcp engine`)
 
 Instead of installing binaries manually, you can run the built-in interactive engine manager to inspect your environment and automatically install missing tools with arrow keys (`↑` / `↓`) and `[Enter]`:
 
 ```bash
-npx code-search-mcp engine
+npx search-code-mcp engine
 ```
 
 It automatically detects which text, AST, and symbol engines are installed, and presents an interactive selector to install any missing tools (via `npm`, `choco`, `winget`, or `brew`).
@@ -72,7 +72,7 @@ If you prefer to install engines manually, ensure the following CLI binaries are
 
 ## 🚀 Quick Start & Configuration
 
-You can run `code-search-mcp` directly via `npx` without manual installation.
+You can run `search-code-mcp` directly via `npx` without manual installation.
 
 ### Claude Desktop
 
@@ -86,7 +86,7 @@ Add to your configuration file:
   "mcpServers": {
     "code-search": {
       "command": "npx",
-      "args": ["-y", "code-search-mcp"]
+      "args": ["-y", "search-code-mcp"]
     }
   }
 }
@@ -101,7 +101,7 @@ Add to your project's `.cursor/mcp.json` or in Cursor **Settings > Features > MC
   "mcpServers": {
     "code-search": {
       "command": "npx",
-      "args": ["-y", "code-search-mcp"]
+      "args": ["-y", "search-code-mcp"]
     }
   }
 }
@@ -116,7 +116,7 @@ Add to your MCP settings file:
   "mcpServers": {
     "code-search": {
       "command": "npx",
-      "args": ["-y", "code-search-mcp"]
+      "args": ["-y", "search-code-mcp"]
     }
   }
 }
@@ -327,8 +327,8 @@ list_files({ path: "./src", filePattern: "*.service.ts" });
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/joutvhu/code-search-mcp.git
-cd code-search-mcp
+git clone https://github.com/joutvhu/search-code-mcp.git
+cd search-code-mcp
 
 # 2. Install dependencies
 npm install

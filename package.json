@@ -1,11 +1,11 @@
 {
-  "name": "code-search-mcp",
+  "name": "search-code-mcp",
   "version": "1.0.0",
   "description": "Unified high-performance code search and structural refactoring MCP server combining ripgrep and ast-grep",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
-    "code-search-mcp": "./dist/index.js"
+    "search-code-mcp": "./dist/index.js"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -35,11 +35,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/joutvhu/code-search-mcp.git"
+    "url": "https://github.com/joutvhu/search-code-mcp.git"
   },
-  "homepage": "https://github.com/joutvhu/code-search-mcp#readme",
+  "homepage": "https://github.com/joutvhu/search-code-mcp#readme",
   "bugs": {
-    "url": "https://github.com/joutvhu/code-search-mcp/issues"
+    "url": "https://github.com/joutvhu/search-code-mcp/issues"
   },
   "license": "MIT",
   "files": [

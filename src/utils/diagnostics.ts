@@ -58,7 +58,7 @@ export async function probeSystemCapabilities(): Promise<SystemCapabilities> {
 }
 
 /**
- * Format an actionable English error message directing user to run 'code-search-mcp engine'
+ * Format an actionable English error message directing user to run 'search-code-mcp engine'
  * and providing immediate alternative tools for the AI agent.
  */
 export async function formatMissingEngineError(
@@ -73,7 +73,7 @@ export async function formatMissingEngineError(
       "[Missing Engine] AST search engine ('ast-grep' or 'sg') is not installed on this system.",
       "",
       "• To inspect and interactively install missing engines, run:",
-      "  👉 npx code-search-mcp engine",
+      "  👉 npx search-code-mcp engine",
       "",
       "• AVAILABLE ALTERNATIVES FOR AI AGENT (Call these directly without re-checking PATH):"
     );
@@ -105,7 +105,7 @@ export async function formatMissingEngineError(
       "[Missing Engine] No text search engine found ('ripgrep', 'ugrep', or 'git').",
       "",
       "• To inspect and interactively install missing engines, run:",
-      "  👉 npx code-search-mcp engine",
+      "  👉 npx search-code-mcp engine",
       "",
       "• AVAILABLE ALTERNATIVES FOR AI AGENT (Call these directly without re-checking PATH):"
     );
@@ -129,7 +129,7 @@ export async function formatMissingEngineError(
       "[Missing Engine] No symbol search engine available ('ctags', 'ast-grep', or 'ripgrep').",
       "",
       "• To inspect and interactively install missing engines, run:",
-      "  👉 npx code-search-mcp engine",
+      "  👉 npx search-code-mcp engine",
       "",
       "• AVAILABLE ALTERNATIVES FOR AI AGENT:",
       '  - list_files({ path: "." })'
