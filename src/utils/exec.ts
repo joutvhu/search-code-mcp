@@ -19,18 +19,28 @@ function getInstallHint(binName: string): string {
   const isMac = process.platform === "darwin";
 
   if (binName.includes("ast-grep")) {
-    return "Please install ast-grep using: 'npm install -g @ast-grep/cli' or 'cargo install ast-grep --locked' or 'brew install ast-grep'.";
+    return [
+      "Binary 'ast-grep' not found in PATH.",
+      "• For AI Agent: Fall back to `type: 'regex'` or `type: 'text'` (powered by ripgrep) if you only need string or pattern matching.",
+      "• To enable structural AST features, install ast-grep: 'npm install -g @ast-grep/cli' or 'cargo install ast-grep --locked' or 'brew install ast-grep'."
+    ].join("\n");
   }
+
   if (binName.includes("rg") || binName.includes("ripgrep")) {
-    if (isWin) {
-      return "Please install ripgrep using: 'winget install BurntSushi.ripgrep.MSVC' or 'choco install ripgrep'.";
-    } else if (isMac) {
-      return "Please install ripgrep using: 'brew install ripgrep'.";
-    } else {
-      return "Please install ripgrep using your package manager, e.g. 'sudo apt install ripgrep'.";
-    }
+    const installCmd = isWin
+      ? "winget install BurntSushi.ripgrep.MSVC (or 'choco install ripgrep')"
+      : isMac
+      ? "brew install ripgrep"
+      : "sudo apt install ripgrep";
+
+    return [
+      "Binary 'rg' (ripgrep) not found in PATH.",
+      "• For AI Agent: If ast-grep is installed, you can use `type: 'ast'` to search by AST structure.",
+      `• To install ripgrep: '${installCmd}'.`
+    ].join("\n");
   }
-  return `Please ensure '${binName}' is installed and in PATH.`;
+
+  return `Binary '${binName}' not found in PATH. Please ensure it is installed and added to system PATH.`;
 }
 
 /**
@@ -45,14 +55,8 @@ export function safeSpawn(
   return new Promise((resolve, reject) => {
     const isWindows = process.platform === "win32";
 
-    // On Windows, if calling a batch script (like ast-grep.cmd from npm), we can check or pass .cmd
     let targetCmd = executable;
-    if (isWindows && !targetCmd.endsWith(".exe") && !targetCmd.endsWith(".cmd")) {
-      // If ast-grep is called without extension on Windows, prefer ast-grep.cmd if from npm
-      // Native child_process on Windows will find .exe or .cmd automatically when windowsVerbatimArguments or proper path is used
-    }
 
-    // Never use shell: true to prevent command injection and DEP0190 warnings
     const child = spawn(targetCmd, args, {
       shell: false,
       cwd: cwd || process.cwd(),
@@ -81,13 +85,13 @@ export function safeSpawn(
             .then(resolve)
             .catch(() => {
               const hint = getInstallHint(executable);
-              reject(new Error(`Binary '${executable}' not found in PATH.\n${hint}`));
+              reject(new Error(hint));
             });
           return;
         }
 
         const hint = getInstallHint(executable);
-        reject(new Error(`Binary '${executable}' not found in PATH.\n${hint}`));
+        reject(new Error(hint));
       } else {
         reject(err);
       }

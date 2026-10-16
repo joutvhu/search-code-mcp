@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -37,7 +36,14 @@ server.registerTool(
     inputSchema: SearchSchema.shape,
   },
   async (args) => {
-    return (await handleSearch(args as any)) as any;
+    try {
+      return (await handleSearch(args as any)) as any;
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Search Error: ${err.message || String(err)}` }],
+      };
+    }
   }
 );
 
@@ -49,7 +55,14 @@ server.registerTool(
     inputSchema: ReplaceSchema.shape,
   },
   async (args) => {
-    return (await handleReplace(args as any)) as any;
+    try {
+      return (await handleReplace(args as any)) as any;
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Replace Error: ${err.message || String(err)}` }],
+      };
+    }
   }
 );
 
@@ -61,7 +74,14 @@ server.registerTool(
     inputSchema: CountSchema.shape,
   },
   async (args) => {
-    return (await handleCount(args as any)) as any;
+    try {
+      return (await handleCount(args as any)) as any;
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Count Error: ${err.message || String(err)}` }],
+      };
+    }
   }
 );
 
@@ -73,7 +93,14 @@ server.registerTool(
     inputSchema: DumpTreeSchema.shape,
   },
   async (args) => {
-    return (await handleDumpTree(args as any)) as any;
+    try {
+      return (await handleDumpTree(args as any)) as any;
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `DumpTree Error: ${err.message || String(err)}` }],
+      };
+    }
   }
 );
 
@@ -85,7 +112,14 @@ server.registerTool(
     inputSchema: ListFilesSchema.shape,
   },
   async (args) => {
-    return (await handleListFiles(args as any)) as any;
+    try {
+      return (await handleListFiles(args as any)) as any;
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `ListFiles Error: ${err.message || String(err)}` }],
+      };
+    }
   }
 );
 
