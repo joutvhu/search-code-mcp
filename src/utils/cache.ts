@@ -12,11 +12,19 @@ export interface CachedSearchData {
   matches: any[];
 }
 
-const CACHE_DIR_NAME = ".cache/code-search";
+const CACHE_DIR_NAME = ".cache/search-code";
 const DEFAULT_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
+import { resolveTarget } from "./paths.js";
+
 function getCacheDir(projectPath: string): string {
-  const resolvedBase = path.resolve(projectPath || ".");
+  const { targetPath, basePath } = resolveTarget(projectPath);
+  let resolvedBase = basePath;
+  try {
+    if (fs.existsSync(targetPath) && !fs.statSync(targetPath).isFile()) {
+      resolvedBase = targetPath;
+    }
+  } catch {}
   return path.join(resolvedBase, CACHE_DIR_NAME);
 }
 

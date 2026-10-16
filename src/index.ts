@@ -146,11 +146,32 @@ server.registerTool(
   }
 );
 
+import { setWorkspaceRoot, setRelativePaths } from "./utils/paths.js";
+
 async function main() {
   const args = process.argv.slice(2);
   if (args.includes("engine") || args.includes("--engine") || args.includes("doctor")) {
     await runEngineCli();
     process.exit(0);
+  }
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--relative-paths" || args[i] === "--relative-path" || args[i] === "--relative-paths=true" || args[i] === "--relative-paths=1") {
+      setRelativePaths(true);
+    } else if (args[i] === "--relative-paths=false" || args[i] === "--relative-paths=0") {
+      setRelativePaths(false);
+    } else if (args[i] === "--root" || args[i] === "--workspace") {
+      if (args[i + 1]) {
+        setWorkspaceRoot(args[i + 1]);
+        i++;
+      }
+    } else if (args[i].startsWith("--root=")) {
+      setWorkspaceRoot(args[i].slice(7));
+    } else if (args[i].startsWith("--workspace=")) {
+      setWorkspaceRoot(args[i].slice(12));
+    } else if (!args[i].startsWith("-")) {
+      setWorkspaceRoot(args[i]);
+    }
   }
 
   const transport = new StdioServerTransport();

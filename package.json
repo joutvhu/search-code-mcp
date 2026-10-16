@@ -1,6 +1,6 @@
 {
   "name": "search-code-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Unified high-performance code search and structural refactoring MCP server combining ripgrep and ast-grep",
   "main": "dist/index.js",
   "type": "module",
@@ -27,7 +27,7 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
-    "code-search",
+    "search-code",
     "ripgrep",
     "ast-grep",
     "refactoring",

@@ -67,10 +67,13 @@ export function extractSymbolFromLine(line: string): { kind: SymbolKind; name: s
   return null;
 }
 
+import { resolveTarget, toRelativePath, formatOutputPath } from "../utils/paths.js";
+
 async function runCtagsSymbols(
   binary: string,
   params: Partial<FindSymbolsParams>
 ): Promise<SymbolItem[]> {
+  const { targetPath, basePath } = resolveTarget(params.path);
   const args = [
     "-R",
     "--output-format=json",
@@ -84,9 +87,9 @@ async function runCtagsSymbols(
     args.push(`--exclude=${params.excludePattern}`);
   }
 
-  args.push(params.path || ".");
+  args.push(targetPath);
 
-  const res = await safeSpawn(binary, args);
+  const res = await safeSpawn(binary, args, undefined, basePath);
   const lines = res.stdout.split("\n");
   const items: SymbolItem[] = [];
 
@@ -116,7 +119,7 @@ async function runCtagsSymbols(
       items.push({
         name,
         kind,
-        file: tag.path,
+        file: formatOutputPath(tag.path, basePath),
         line: tag.line || 1,
         containerName: tag.scope || undefined,
         signature: tag.pattern

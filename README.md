@@ -7,7 +7,7 @@
 
 A high-performance, unified [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server combining the blazing speed of **ripgrep** (regex/text search) with the deep structural syntax awareness of **ast-grep** (AST pattern matching and refactoring).
 
-Designed specifically for AI Coding Agents (**Cursor**, **Claude Desktop**, **Antigravity**, **Cline / Roo Code**, **Windsurf**, **Zed**).
+Designed specifically for AI Coding Agents (**Cursor**, **Claude Desktop**, **Kiro**, **Antigravity**, **Cline / Roo Code**, **Windsurf**, **Zed**).
 
 ---
 
@@ -20,12 +20,13 @@ Designed specifically for AI Coding Agents (**Cursor**, **Claude Desktop**, **An
   - **AST Search**: `ast-grep` ➜ alias `sg`.
   - **File Listing**: `rg --files` ➜ `git ls-files` ➜ Native Node.js recursive directory walk.
 - **Hybrid 2-Tier Search (`type: "hybrid"`)**: Scans candidate files with ripgrep in ~30ms, then parses AST with ast-grep _only_ on matching files—giving **10x–50x speedups** over pure AST searches on large codebases.
-- **Project-Scoped Pagination Cache (`./.cache/code-search/`)**:
+- **Project-Scoped Pagination Cache (`./.cache/search-code/`)**:
   - Automatically activates only when results exceed your chunk limit.
   - Returns a `searchId` for instant sub-millisecond scrolling through next pages (`offset` / `limit`) without re-scanning disk.
-  - Creates an isolated `./.cache/code-search/` directory with an auto-generated `.gitignore` so cache files are never committed to git.
+  - Creates an isolated `./.cache/search-code/` directory with an auto-generated `.gitignore` so cache files are never committed to git.
 - **Gitignore Respected by Default**: Both ripgrep and ast-grep automatically respect your project's `.gitignore` (`noIgnore: false` by default). Pass `noIgnore: true` only when you need to inspect ignored files.
 - **Safe Structural Refactoring (`replace`)**: Defaults to `dryRun: true` to generate unified git-style diff previews and safety limits (`maxReplacements: 50`) before writing any changes to disk.
+- **Flexible Path Handling**: Supports both relative paths (e.g. `"."`, `"./src"`) and absolute paths as input. By default, tool outputs return absolute paths. Set `RELATIVE_PATHS=true` in environment (or pass `--relative-paths`) to format output paths as clean relative paths to save LLM context window tokens.
 - **Token Protection & Truncation**: Automatically trims overly long single lines (`maxLineLength: 500`) and strips ANSI color codes to protect LLM context windows.
 - **Actionable Diagnostics**: Syntax errors in AST patterns or YAML rules return helpful self-correction hints (e.g. suggesting `dump_tree` or `stopBy: end`).
 - **Zero-Dependency Single-File Bundle**: Packaged with `tsup` into a self-contained single executable bundle for instant startup via `npx`.
@@ -74,17 +75,12 @@ If you prefer to install engines manually, ensure the following CLI binaries are
 
 You can run `search-code-mcp` directly via `npx` without manual installation.
 
-### Claude Desktop
-
-Add to your configuration file:
-
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+Add the following configuration to your client's MCP configuration file:
 
 ```json
 {
   "mcpServers": {
-    "code-search": {
+    "search-code": {
       "command": "npx",
       "args": ["-y", "search-code-mcp"]
     }
@@ -92,35 +88,19 @@ Add to your configuration file:
 }
 ```
 
-### Cursor IDE
+> [!TIP]
+> **Token-Saving Relative Paths**: Add `"env": { "RELATIVE_PATHS": "true" }` (or pass `"--relative-paths"` in `args`) if you want tool outputs to return clean relative paths instead of full absolute paths.
 
-Add to your project's `.cursor/mcp.json` or in Cursor **Settings > Features > MCP > Add New MCP Server**:
+### 📍 Configuration File Locations
 
-```json
-{
-  "mcpServers": {
-    "code-search": {
-      "command": "npx",
-      "args": ["-y", "search-code-mcp"]
-    }
-  }
-}
-```
-
-### Antigravity IDE / Cline / Roo Code / Windsurf
-
-Add to your MCP settings file:
-
-```json
-{
-  "mcpServers": {
-    "code-search": {
-      "command": "npx",
-      "args": ["-y", "search-code-mcp"]
-    }
-  }
-}
-```
+| Client | Configuration File Path |
+| :--- | :--- |
+| **Kiro** | **Workspace**: `.kiro/settings/mcp.json`<br>**Global**: `~/.kiro/settings/mcp.json` *(Windows: `%USERPROFILE%\.kiro\settings\mcp.json`)* |
+| **Cursor** | **Workspace**: `.cursor/mcp.json`<br>Or in **Settings > Features > MCP > Add New MCP Server** |
+| **Claude Desktop** | **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`<br>**Windows**: `%APPDATA%\Claude\claude_desktop_config.json` |
+| **Antigravity IDE** | `%USERPROFILE%\.gemini\config\mcp_config.json` |
+| **Windsurf** | `~/.codeium/windsurf/mcp_config.json` |
+| **Cline / Roo Code** | Click **MCP Servers** icon ➜ **Configure MCP Servers** |
 
 ---
 

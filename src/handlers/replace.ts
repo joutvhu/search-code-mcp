@@ -1,8 +1,10 @@
 import fs from "node:fs";
+import path from "node:path";
 import { ReplaceParams } from "../types.js";
 import { runAstGrepRewrite } from "../engines/astgrep.js";
 import { buildUnifiedDiff } from "../utils/formatters.js";
 import { runRipgrepSearch } from "../engines/ripgrep.js";
+import { resolveTarget, toRelativePath, formatOutputPath } from "../utils/paths.js";
 
 export async function handleReplace(params: ReplaceParams) {
   const isDryRun = params.dryRun !== false;
@@ -29,11 +31,14 @@ export async function handleReplace(params: ReplaceParams) {
     const diffs: string[] = [];
     let totalReplaced = 0;
 
+    const { basePath } = resolveTarget(params.path);
+
     for (const filePath of uniqueFiles) {
       if (totalReplaced >= (params.maxReplacements || 50)) break;
 
       try {
-        const originalContent = fs.readFileSync(filePath, "utf8");
+        const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
+        const originalContent = fs.readFileSync(absPath, "utf8");
         const regex =
           params.type === "text"
             ? new RegExp(params.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")
@@ -42,10 +47,11 @@ export async function handleReplace(params: ReplaceParams) {
         const modifiedContent = originalContent.replace(regex, params.replacement);
         if (originalContent !== modifiedContent) {
           totalReplaced++;
-          diffs.push(buildUnifiedDiff(filePath, originalContent, modifiedContent));
+          const displayPath = formatOutputPath(absPath, basePath);
+          diffs.push(buildUnifiedDiff(displayPath, originalContent, modifiedContent));
 
           if (!isDryRun) {
-            fs.writeFileSync(filePath, modifiedContent, "utf8");
+            fs.writeFileSync(absPath, modifiedContent, "utf8");
           }
         }
       } catch (err) {

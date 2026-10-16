@@ -28,7 +28,7 @@ export const SearchSchema = z.object({
 
   // Fresh search parameters
   query: z.string().optional().describe("Search query: plain text, regex, AST pattern, or YAML rule"),
-  path: z.string().optional().default(".").describe("Directory or file to search in (default: current directory '.')"),
+  path: z.string().optional().default(".").describe("Directory or file to search in. Accepts relative or absolute paths (default: '.')"),
   type: SearchTypeSchema.optional().default("regex").describe("Search engine/type: 'regex' (default), 'text', 'ast', 'ast_rule', 'hybrid', 'symbol'"),
 
   // File filtering & Gitignore
@@ -56,7 +56,7 @@ export const ReplaceTypeSchema = z.enum(["ast", "regex", "text"]);
 export type ReplaceType = z.infer<typeof ReplaceTypeSchema>;
 
 export const ReplaceSchema = z.object({
-  path: z.string().optional().default(".").describe("Directory or file to perform replacement in (default: '.')"),
+  path: z.string().optional().default(".").describe("Directory or file to perform replacement in. Accepts relative or absolute paths (default: '.')"),
   query: z.string().describe("Target search pattern to replace (AST pattern or regex)"),
   replacement: z.string().describe("Replacement string or AST rewrite pattern"),
   type: ReplaceTypeSchema.optional().default("ast").describe("Replacement engine: 'ast' (default structural rewrite), 'regex', 'text'"),
@@ -72,7 +72,7 @@ export const ReplaceSchema = z.object({
 export type ReplaceParams = z.infer<typeof ReplaceSchema>;
 
 export const CountSchema = z.object({
-  path: z.string().optional().default(".").describe("Directory or file to count matches in (default: '.')"),
+  path: z.string().optional().default(".").describe("Directory or file to count matches in. Accepts relative or absolute paths (default: '.')"),
   query: z.string().describe("Search pattern to count"),
   type: z.enum(["regex", "text", "ast"]).optional().default("regex").describe("Engine mode: 'regex' (default), 'text', 'ast'"),
   filePattern: z.string().optional().describe("Glob pattern to filter files"),
@@ -95,7 +95,7 @@ export const DumpTreeSchema = z.object({
 export type DumpTreeParams = z.infer<typeof DumpTreeSchema>;
 
 export const ListFilesSchema = z.object({
-  path: z.string().optional().default(".").describe("Directory to list files in (default: '.')"),
+  path: z.string().optional().default(".").describe("Directory to list files in. Accepts relative or absolute paths (default: '.')"),
   filePattern: z.string().optional().describe("Glob pattern to filter files"),
   fileType: z.string().optional().describe("File type filter"),
   excludePattern: z.string().optional().describe("Glob pattern to exclude"),
@@ -133,7 +133,7 @@ export interface SymbolItem {
 
 export const FindSymbolsSchema = z.object({
   name: z.string().optional().default("").describe("Symbol name or substring pattern to find (leave empty to list all symbols in target path)"),
-  path: z.string().optional().default(".").describe("File or directory to search symbols in (default: '.')"),
+  path: z.string().optional().default(".").describe("File or directory to search symbols in. Accepts relative or absolute paths (default: '.')"),
   kinds: z.array(SymbolKindSchema).optional().describe("Filter by symbol kinds: 'function', 'class', 'interface', 'method', 'variable', 'type', 'struct', 'enum', 'trait', 'module'"),
   exactMatch: z.boolean().optional().default(false).describe("If true, only match exact symbol name. If false (default), matches prefix or substring"),
   filePattern: z.string().optional().describe("Glob pattern to filter files, e.g. '*.ts' or '*.py'"),
