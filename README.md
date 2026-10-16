@@ -1,65 +1,59 @@
-# code-search-mcp
+# Code Search MCP
 
-An all-in-one, high-performance [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server combining the blazing speed of **ripgrep** with the deep structural syntax awareness of **ast-grep**.
+[![npm version](https://img.shields.io/npm/v/code-search-mcp.svg?style=flat-square&color=CB3837)](https://www.npmjs.com/package/code-search-mcp)
+[![CI](https://github.com/joutvhu/code-search-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/joutvhu/code-search-mcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-8A2BE2.svg?style=flat-square)](https://modelcontextprotocol.io/)
 
-Designed specifically for AI Coding Agents (Cursor, Claude Desktop, Antigravity, Roo/Cline, Zed).
+A high-performance, unified [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server combining the blazing speed of **ripgrep** (regex/text search) with the deep structural syntax awareness of **ast-grep** (AST pattern matching and refactoring).
+
+Designed specifically for AI Coding Agents (**Cursor**, **Claude Desktop**, **Antigravity**, **Cline / Roo Code**, **Windsurf**, **Zed**).
 
 ---
 
 ## ⚡ Highlights & Key Features
 
-- **5 Unified Tools (No Prefixes)**: Streamlined into 5 core tools: `search`, `replace`, `count`, `dump_tree`, and `list_files`.
-- **Flexible Modes**: Switch search engines dynamically using `type: "regex" | "text" | "ast" | "ast_rule" | "hybrid" | "symbol"`.
-- **Hybrid 2-Tier Search (`type: "hybrid"`)**: Runs ripgrep to find candidate files in ~30ms, then parses AST with ast-grep only on those files—giving you 10x-50x speedups on large repos.
-- **Gitignore Respected by Default**: Automatically respects `.gitignore` rules across both ripgrep and ast-grep (`noIgnore: false` by default). Pass `noIgnore: true` only when you need to search ignored files.
+- **5 Unified Tools (Zero Prefix Noise)**: Clean tool names without redundant prefixes: `search`, `replace`, `count`, `dump_tree`, and `list_files`.
+- **Hybrid 2-Tier Search (`type: "hybrid"`)**: Scans candidate files with ripgrep in ~30ms, then parses AST with ast-grep _only_ on matching files—giving **10x–50x speedups** over pure AST searches on large codebases.
 - **Project-Scoped Pagination Cache (`./.cache/code-search/`)**:
-  - Zero-waste: Never creates cache files for small result sets.
-  - When results exceed chunk limit, saves results in project-scoped cache with auto-generated `.gitignore` (`*`) so it never gets committed to git.
-  - Return `searchId` for instant (< 1ms) scrolling without re-scanning disk.
-- **Safe Structural Refactoring (`replace`)**: Supports AST rewrites and regex replacements. Defaults to `dryRun: true` providing unified diff previews (`git diff` style) before applying changes to disk.
-- **Token Protection**: Automatically truncates excessively long lines (`maxLineLength: 500`) and strips ANSI color codes to protect LLM context windows.
-- **Actionable Diagnostics**: Catches YAML errors and unknown AST node kinds immediately with self-correcting hints (e.g. suggesting `dump_tree` or `stopBy: end`).
-- **Multi-session Stability**: Tolerates `SIGINT` signals sent by IDEs when opening new terminal tabs/sessions.
+  - Automatically activates only when results exceed your chunk limit.
+  - Returns a `searchId` for instant sub-millisecond scrolling through next pages (`offset` / `limit`) without re-scanning disk.
+  - Creates an isolated `./.cache/code-search/` directory with an auto-generated `.gitignore` so cache files are never committed to git.
+- **Gitignore Respected by Default**: Both ripgrep and ast-grep automatically respect your project's `.gitignore` (`noIgnore: false` by default). Pass `noIgnore: true` only when you need to inspect ignored files.
+- **Safe Structural Refactoring (`replace`)**: Defaults to `dryRun: true` to generate unified git-style diff previews and safety limits (`maxReplacements: 50`) before writing any changes to disk.
+- **Token Protection & Truncation**: Automatically trims overly long single lines (`maxLineLength: 500`) and strips ANSI color codes to protect LLM context windows.
+- **Actionable Diagnostics**: Syntax errors in AST patterns or YAML rules return helpful self-correction hints (e.g. suggesting `dump_tree` or `stopBy: end`).
+- **Zero-Dependency Single-File Bundle**: Packaged with `tsup` into a self-contained single executable bundle for instant startup via `npx`.
 
 ---
 
 ## 📦 Prerequisites
 
-1. **Node.js**: v18 or higher.
-2. **ripgrep (`rg`)**: Available in `PATH`.
-   - Windows: `winget install BurntSushi.ripgrep.MSVC` or `choco install ripgrep`
-   - macOS: `brew install ripgrep`
-   - Linux: `sudo apt install ripgrep`
-3. **ast-grep (`ast-grep`)**: Available in `PATH`.
-   - Install via npm: `npm install -g @ast-grep/cli`
-   - Install via cargo: `cargo install ast-grep --locked`
-   - macOS: `brew install ast-grep`
+Ensure the following native CLI binaries are installed and accessible in your system `PATH`:
+
+### 1. ripgrep (`rg`)
+
+- **Windows**: `winget install BurntSushi.ripgrep.MSVC` or `choco install ripgrep`
+- **macOS**: `brew install ripgrep`
+- **Linux (Debian/Ubuntu)**: `sudo apt install ripgrep`
+- **Linux (Arch)**: `sudo pacman -S ripgrep`
+
+### 2. ast-grep (`ast-grep`)
+
+- **npm (Recommended)**: `npm install -g @ast-grep/cli`
+- **macOS**: `brew install ast-grep`
+- **Cargo (Rust)**: `cargo install ast-grep --locked`
 
 ---
 
-## 🚀 Installation & Setup
+## 🚀 Quick Start & Configuration
 
-1. Clone or navigate to the repository:
-   ```bash
-   cd code-search-mcp
-   ```
+You can run `code-search-mcp` directly via `npx` without manual installation.
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+### Claude Desktop
 
-3. Build the project:
-   ```bash
-   npm run build
-   ```
+Add to your configuration file:
 
----
-
-## ⚙️ Configuration
-
-### 1. Claude Desktop
-Add to your Claude Desktop configuration file:
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
@@ -67,36 +61,38 @@ Add to your Claude Desktop configuration file:
 {
   "mcpServers": {
     "code-search": {
-      "command": "node",
-      "args": ["F:/Documents/Library/AI/code-search-mcp/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "code-search-mcp"]
     }
   }
 }
 ```
 
-### 2. Cursor IDE
-Add to `.cursor-mcp/settings.json` or in **Settings > Features > MCP**:
+### Cursor IDE
+
+Add to your project's `.cursor/mcp.json` or in Cursor **Settings > Features > MCP > Add New MCP Server**:
 
 ```json
 {
   "mcpServers": {
     "code-search": {
-      "command": "node",
-      "args": ["F:/Documents/Library/AI/code-search-mcp/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "code-search-mcp"]
     }
   }
 }
 ```
 
-### 3. Antigravity IDE / Cline / Roo Code
-Add to your client MCP settings:
+### Antigravity IDE / Cline / Roo Code / Windsurf
+
+Add to your MCP settings file:
 
 ```json
 {
   "mcpServers": {
     "code-search": {
-      "command": "node",
-      "args": ["F:/Documents/Library/AI/code-search-mcp/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "code-search-mcp"]
     }
   }
 }
@@ -107,21 +103,46 @@ Add to your client MCP settings:
 ## 🛠️ Tool Reference
 
 ### 1. `search`
-All-in-one search engine.
+
+Unified search engine supporting regex, literal text, AST patterns, relational YAML rules, and hybrid searches.
+
+| Parameter        | Type      | Default     | Description                                                                                  |
+| :--------------- | :-------- | :---------- | :------------------------------------------------------------------------------------------- |
+| `query`          | `string`  | -           | Search query: text, regex, AST pattern, or YAML rule. _(Optional if `searchId` is provided)_ |
+| `path`           | `string`  | `"."`       | Target directory or file to search                                                           |
+| `type`           | `enum`    | `"regex"`   | Search engine mode: `"regex"`, `"text"`, `"ast"`, `"ast_rule"`, `"hybrid"`, `"symbol"`       |
+| `searchId`       | `string`  | -           | ID of a previous search to view remaining results instantly from cache                       |
+| `offset`         | `number`  | `1`         | Starting result index for pagination (1-based)                                               |
+| `limit`          | `number`  | `50`        | Maximum matches to return in this chunk                                                      |
+| `filePattern`    | `string`  | -           | Glob pattern to filter files (e.g. `"*.{ts,tsx}"`, `"!**/*.spec.ts"`)                        |
+| `fileType`       | `string`  | -           | Ripgrep file type filter (e.g. `"ts"`, `"py"`, `"rust"`, `"json"`)                           |
+| `excludePattern` | `string`  | -           | Glob pattern to exclude (e.g. `"**/dist/**"`)                                                |
+| `noIgnore`       | `boolean` | `false`     | If `true`, searches inside `.gitignore`-ignored files                                        |
+| `caseSensitive`  | `boolean` | smart-case  | Case sensitivity                                                                             |
+| `context`        | `number`  | `0`         | Number of context lines before and after match (`-C`)                                        |
+| `wordMatch`      | `boolean` | `false`     | Match whole words only (`-w`)                                                                |
+| `multiline`      | `boolean` | `false`     | Match regex across line breaks (`-U`)                                                        |
+| `includeHidden`  | `boolean` | `false`     | Search hidden files and folders (`-.`)                                                       |
+| `language`       | `string`  | auto        | Programming language for AST mode (auto-detected from file extension if omitted)             |
+| `outputFormat`   | `enum`    | `"content"` | `"content"` (full snippets), `"compact"` (`file:line`), `"files_only"`, or `"json"`          |
+
+#### Examples:
 
 ```typescript
-// 1. Fast regex or literal search
-search({ query: "handleRequest", path: "./src" })
-search({ query: "class.*Controller", type: "regex", context: 2 })
-search({ query: "TODO:", type: "text", fileType: "ts" })
+// Fast regex or text search
+search({ query: "handleRequest", path: "./src" });
+search({ query: "class.*Controller", type: "regex", context: 2 });
 
-// 2. AST structural pattern search (tolerates whitespace/comments)
-search({ query: "console.log($$$ARGS)", type: "ast", language: "typescript" })
+// AST structural pattern (ignores whitespace & formatting differences)
+search({ query: "console.log($$$ARGS)", type: "ast", language: "typescript" });
 
-// 3. Complex YAML relational rule
+// Hybrid 2-tier search: 10x-50x faster on huge codebases
+search({ query: "class $NAME extends BaseService { $$$ }", type: "hybrid" });
+
+// Complex relational YAML rule
 search({
   query: `
-id: find-async-await
+id: find-async-arrow
 language: typescript
 rule:
   all:
@@ -130,69 +151,141 @@ rule:
         pattern: await $EXPR
         stopBy: end
 `,
-  type: "ast_rule"
-})
+  type: "ast_rule",
+});
 
-// 4. Hybrid 2-tier search for huge codebases
-search({ query: "class $NAME extends BaseService { $$$ }", type: "hybrid" })
-
-// 5. Symbol definition discovery
-search({ query: "UserService", type: "symbol" })
-
-// 6. View next chunk using searchId
-search({ searchId: "s_9f2a7b", offset: 51, limit: 50 })
-```
-
-### 2. `replace`
-Structural code refactoring and regex replacement.
-
-```typescript
-// Preview diff with dryRun: true (default)
-replace({
-  query: "oldFunc($A, $B)",
-  replacement: "newFunc({ a: $A, b: $B })",
-  type: "ast",
-  dryRun: true
-})
-
-// Apply changes to disk
-replace({
-  query: "oldFunc($A, $B)",
-  replacement: "newFunc({ a: $A, b: $B })",
-  type: "ast",
-  dryRun: false
-})
-```
-
-### 3. `count`
-Count matching occurrences or lines without pulling contents into context.
-
-```typescript
-count({ query: "FIXME", path: "./src" })
-count({ query: "catch($E)", type: "ast", perFile: true })
-```
-
-### 4. `dump_tree`
-Inspect concrete syntax trees to discover exact node kinds.
-
-```typescript
-dump_tree({ code: "const x = 1;", language: "typescript", format: "cst" })
-```
-
-### 5. `list_files`
-Quickly enumerate files with glob and type filters.
-
-```typescript
-list_files({ path: "./src", filePattern: "*.service.ts" })
+// Retrieve next chunk from cache using searchId
+search({ searchId: "s_9f2a7b", offset: 51, limit: 50 });
 ```
 
 ---
 
-## 🧪 Testing with MCP Inspector
+### 2. `replace`
 
-Test your server visually with the official MCP Inspector:
+Structural code refactoring and replacement engine. Supports AST rewrite patterns and Regex/Text replacements.
+
+| Parameter         | Type      | Default      | Description                                                             |
+| :---------------- | :-------- | :----------- | :---------------------------------------------------------------------- |
+| `query`           | `string`  | **Required** | Search pattern to replace (AST pattern or regex)                        |
+| `replacement`     | `string`  | **Required** | Replacement string or AST rewrite pattern                               |
+| `path`            | `string`  | `"."`        | Target directory or file                                                |
+| `type`            | `enum`    | `"ast"`      | Replacement mode: `"ast"` (structural rewrite), `"regex"`, `"text"`     |
+| `dryRun`          | `boolean` | `true`       | If `true`, outputs unified diff preview without modifying files on disk |
+| `maxReplacements` | `number`  | `50`         | Safety limit on maximum matches to replace                              |
+| `filePattern`     | `string`  | -            | Glob pattern to filter files                                            |
+| `fileType`        | `string`  | -            | File type filter                                                        |
+| `excludePattern`  | `string`  | -            | Glob pattern to exclude                                                 |
+| `noIgnore`        | `boolean` | `false`      | Whether to modify `.gitignore`-ignored files                            |
+| `language`        | `string`  | auto         | Programming language for AST mode                                       |
+
+#### Examples:
+
+```typescript
+// 1. Dry run preview (safe default, outputs unified git diff)
+replace({
+  query: "fetchData($A, $B)",
+  replacement: "fetchData({ url: $A, options: $B })",
+  type: "ast",
+  dryRun: true,
+});
+
+// 2. Apply modifications to disk
+replace({
+  query: "fetchData($A, $B)",
+  replacement: "fetchData({ url: $A, options: $B })",
+  type: "ast",
+  dryRun: false,
+});
+```
+
+---
+
+### 3. `count`
+
+Count matching occurrences or lines across files without returning match content, saving tokens.
+
+| Parameter        | Type      | Default      | Description                                                  |
+| :--------------- | :-------- | :----------- | :----------------------------------------------------------- |
+| `query`          | `string`  | **Required** | Search pattern to count                                      |
+| `path`           | `string`  | `"."`        | Target directory or file                                     |
+| `type`           | `enum`    | `"regex"`    | Engine mode: `"regex"`, `"text"`, `"ast"`                    |
+| `countLines`     | `boolean` | `false`      | Count matching lines (`true`) or total occurrences (`false`) |
+| `perFile`        | `boolean` | `false`      | Show breakdown of matches per file                           |
+| `filePattern`    | `string`  | -            | Glob pattern filter                                          |
+| `fileType`       | `string`  | -            | File type filter                                             |
+| `excludePattern` | `string`  | -            | Glob exclude filter                                          |
+| `noIgnore`       | `boolean` | `false`      | Search inside ignored files                                  |
+| `language`       | `string`  | auto         | Language for AST mode                                        |
+
+#### Examples:
+
+```typescript
+count({ query: "TODO:", type: "text" });
+count({ query: "catch ($ERR) { $$$ }", type: "ast", perFile: true });
+```
+
+---
+
+### 4. `dump_tree`
+
+Inspect concrete syntax trees (CST) or AST node structures to craft precise ast-grep patterns.
+
+| Parameter  | Type     | Default      | Description                                                            |
+| :--------- | :------- | :----------- | :--------------------------------------------------------------------- |
+| `code`     | `string` | **Required** | Code snippet to inspect                                                |
+| `language` | `string` | **Required** | Programming language (e.g. `"typescript"`, `"python"`, `"rust"`)       |
+| `format`   | `enum`   | `"cst"`      | Tree format: `"cst"` (syntax tree with kinds), `"ast"`, or `"pattern"` |
+
+#### Example:
+
+```typescript
+dump_tree({
+  code: "const calculate = (a, b) => a + b;",
+  language: "typescript",
+  format: "cst",
+});
+```
+
+---
+
+### 5. `list_files`
+
+Enumerate files matching glob patterns or file types without scanning file contents.
+
+| Parameter        | Type      | Default | Description                                |
+| :--------------- | :-------- | :------ | :----------------------------------------- |
+| `path`           | `string`  | `"."`   | Directory to search                        |
+| `filePattern`    | `string`  | -       | Glob pattern filter (e.g. `"*.config.js"`) |
+| `fileType`       | `string`  | -       | Ripgrep file type filter                   |
+| `excludePattern` | `string`  | -       | Glob pattern to exclude                    |
+| `noIgnore`       | `boolean` | `false` | List files ignored by `.gitignore`         |
+| `includeHidden`  | `boolean` | `false` | Include hidden files and folders           |
+
+#### Example:
+
+```typescript
+list_files({ path: "./src", filePattern: "*.service.ts" });
+```
+
+---
+
+## 🔍 Development & Contributing
 
 ```bash
+# 1. Clone the repository
+git clone https://github.com/joutvhu/code-search-mcp.git
+cd code-search-mcp
+
+# 2. Install dependencies
+npm install
+
+# 3. Type check
+npm run check
+
+# 4. Build single-file bundle
+npm run build
+
+# 5. Test with MCP Inspector
 npx @modelcontextprotocol/inspector node dist/index.js
 ```
 
@@ -200,4 +293,4 @@ npx @modelcontextprotocol/inspector node dist/index.js
 
 ## 📄 License
 
-MIT
+This project is licensed under the [MIT License](LICENSE).
