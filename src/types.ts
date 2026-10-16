@@ -104,3 +104,44 @@ export const ListFilesSchema = z.object({
 });
 
 export type ListFilesParams = z.infer<typeof ListFilesSchema>;
+
+export const SymbolKindSchema = z.enum([
+  "function",
+  "class",
+  "interface",
+  "method",
+  "variable",
+  "type",
+  "struct",
+  "enum",
+  "trait",
+  "module",
+  "other",
+]);
+
+export type SymbolKind = z.infer<typeof SymbolKindSchema>;
+
+export interface SymbolItem {
+  name: string;
+  kind: string;
+  file: string;
+  line: number;
+  column?: number;
+  containerName?: string;
+  signature?: string;
+}
+
+export const FindSymbolsSchema = z.object({
+  name: z.string().optional().default("").describe("Symbol name or substring pattern to find (leave empty to list all symbols in target path)"),
+  path: z.string().optional().default(".").describe("File or directory to search symbols in (default: '.')"),
+  kinds: z.array(SymbolKindSchema).optional().describe("Filter by symbol kinds: 'function', 'class', 'interface', 'method', 'variable', 'type', 'struct', 'enum', 'trait', 'module'"),
+  exactMatch: z.boolean().optional().default(false).describe("If true, only match exact symbol name. If false (default), matches prefix or substring"),
+  filePattern: z.string().optional().describe("Glob pattern to filter files, e.g. '*.ts' or '*.py'"),
+  fileType: z.string().optional().describe("File type filter, e.g. 'ts', 'py', 'rust', 'go'"),
+  excludePattern: z.string().optional().describe("Glob pattern to exclude, e.g. '**/node_modules/**', '**/dist/**'"),
+  noIgnore: z.boolean().optional().default(false).describe("Whether to search inside gitignored files"),
+  maxResults: z.number().optional().default(100).describe("Maximum number of symbols to return (default: 100)"),
+  outputFormat: z.enum(["table", "json", "compact"]).optional().default("table").describe("Output format: 'table' (default markdown table), 'json', or 'compact' (file:line: [kind] name)"),
+});
+
+export type FindSymbolsParams = z.infer<typeof FindSymbolsSchema>;

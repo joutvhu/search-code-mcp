@@ -1,13 +1,13 @@
 import { MatchItem } from "../utils/formatters.js";
 import { runRipgrepSearch } from "./ripgrep.js";
-import { runAstGrepPattern, runAstGrepRule } from "./astgrep.js";
+import { runAstGrepPattern } from "./astgrep.js";
 import { SearchParams } from "../types.js";
+import { searchSymbols } from "./symbols.js";
 
 /**
  * Extract words/identifiers from an AST pattern to use as coarse filter for ripgrep
  */
 function extractKeywords(pattern: string): string[] {
-  // Extract words that are not meta-variables ($NAME, $$$ARGS) and not punctuation
   const words = pattern
     .replace(/\$[A-Z0-9_]+/g, "")
     .replace(/\$\$\$[A-Z0-9_]*/g, "")
@@ -25,15 +25,12 @@ export async function runHybridSearch(params: SearchParams): Promise<MatchItem[]
   const query = params.query || "";
   const keywords = extractKeywords(query);
 
-  // If no substantial keywords can be extracted, fallback to standard AST search
   if (keywords.length === 0) {
     return runAstGrepPattern(params);
   }
 
-  // Pick the longest keyword as the primary coarse filter
   const primaryKeyword = keywords.sort((a, b) => b.length - a.length)[0];
 
-  // Step 1: Ripgrep candidate file discovery
   const rgMatches = await runRipgrepSearch({
     ...params,
     query: primaryKeyword,
@@ -45,7 +42,6 @@ export async function runHybridSearch(params: SearchParams): Promise<MatchItem[]
     return [];
   }
 
-  // Step 2: ast-grep scan on candidate files
   const allMatches: MatchItem[] = [];
   for (const file of candidateFiles) {
     try {
@@ -63,33 +59,28 @@ export async function runHybridSearch(params: SearchParams): Promise<MatchItem[]
 }
 
 /**
- * Symbol Search: Automatically resolves function/class/interface/type declaration
+ * Multi-engine Symbol Search (ctags -> ast-grep -> ripgrep regex heuristic)
  */
 export async function runSymbolSearch(params: SearchParams): Promise<MatchItem[]> {
   const symbol = (params.query || "").trim();
-  const lang = params.language || "typescript";
-
-  // Build a generic AST rule targeting declarations having the symbol name
-  const ruleYaml = `
-id: find-symbol-${symbol.toLowerCase()}
-language: ${lang}
-rule:
-  any:
-    - pattern: "function ${symbol}($SS$)"
-    - pattern: "class ${symbol} { $$$ }"
-    - pattern: "class ${symbol} extends $BASE { $$$ }"
-    - pattern: "interface ${symbol} { $$$ }"
-    - pattern: "type ${symbol} = $TYPE"
-    - pattern: "const ${symbol} = $VALUE"
-    - pattern: "let ${symbol} = $VALUE"
-    - pattern: "enum ${symbol} { $$$ }"
-    - pattern: "def ${symbol}($SS$):"
-    - pattern: "fn ${symbol}($SS$)"
-`;
-
-  return runAstGrepRule({
-    ...params,
-    query: ruleYaml,
-    type: "ast_rule",
+  const { symbols } = await searchSymbols({
+    name: symbol,
+    path: params.path,
+    filePattern: params.filePattern,
+    fileType: params.fileType,
+    excludePattern: params.excludePattern,
+    noIgnore: params.noIgnore,
+    exactMatch: params.wordMatch ?? false,
+    maxResults: params.limit || 50,
   });
+
+  return symbols.map((s) => ({
+    file: s.file,
+    startLine: s.line,
+    column: s.column,
+    content: s.signature || `[${s.kind}] ${s.name}`,
+    symbolKind: s.kind,
+    symbolName: s.name,
+    containerName: s.containerName,
+  }));
 }

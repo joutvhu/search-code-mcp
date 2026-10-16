@@ -6,12 +6,14 @@ import {
   CountSchema,
   DumpTreeSchema,
   ListFilesSchema,
+  FindSymbolsSchema,
 } from "./types.js";
 import { handleSearch } from "./handlers/search.js";
 import { handleReplace } from "./handlers/replace.js";
 import { handleCount } from "./handlers/count.js";
 import { handleDumpTree } from "./handlers/dumpTree.js";
 import { handleListFiles } from "./handlers/listFiles.js";
+import { handleFindSymbols } from "./handlers/findSymbols.js";
 
 // Multi-session stability: Ignore SIGINT from Claude Code or Cursor
 process.on("SIGINT", () => {
@@ -99,6 +101,26 @@ server.registerTool(
       return {
         isError: true,
         content: [{ type: "text", text: `DumpTree Error: ${err.message || String(err)}` }],
+      };
+    }
+  }
+);
+
+
+server.registerTool(
+  "find_symbols",
+  {
+    description:
+      "Find code symbols (functions, classes, interfaces, methods, types, variables, structs, enums) across the codebase. Automatically selects best available engine: Universal Ctags -> ast-grep -> ripgrep regex heuristic.",
+    inputSchema: FindSymbolsSchema.shape,
+  },
+  async (args) => {
+    try {
+      return (await handleFindSymbols(args as any)) as any;
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `FindSymbols Error: ${err.message || String(err)}` }],
       };
     }
   }

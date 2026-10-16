@@ -8,6 +8,7 @@ export interface ExecResult {
 
 export type TextEngineName = "rg" | "ugrep" | "git";
 export type AstEngineName = "ast-grep" | "sg";
+export type SymbolEngineName = "ctags" | "ast-grep" | "ripgrep";
 
 export interface ResolvedTextEngine {
   name: TextEngineName;
@@ -19,8 +20,14 @@ export interface ResolvedAstEngine {
   binary: string;
 }
 
+export interface ResolvedSymbolEngine {
+  name: SymbolEngineName;
+  binary: string;
+}
+
 let cachedTextEngine: ResolvedTextEngine | null = null;
 let cachedAstEngine: ResolvedAstEngine | null = null;
+let cachedSymbolEngine: ResolvedSymbolEngine | null = null;
 
 /**
  * Detect available text search engine (rg -> ugrep -> git)
@@ -110,6 +117,47 @@ export async function detectAstEngine(): Promise<ResolvedAstEngine> {
 /**
  * Legacy resolver for backward compatibility
  */
+
+/**
+ * Detect available symbol search engine (ctags -> ast-grep -> ripgrep heuristic)
+ */
+export async function detectSymbolEngine(): Promise<ResolvedSymbolEngine> {
+  if (cachedSymbolEngine) return cachedSymbolEngine;
+
+  // 1. Explicit env override
+  if (process.env.CTAGS_PATH) {
+    cachedSymbolEngine = { name: "ctags", binary: process.env.CTAGS_PATH };
+    return cachedSymbolEngine;
+  }
+
+  // 2. Check universal-ctags / ctags
+  try {
+    const res = await safeSpawn("ctags", ["--version"]);
+    if (res.stdout.includes("Universal Ctags") || res.stdout.includes("Exuberant Ctags")) {
+      cachedSymbolEngine = { name: "ctags", binary: "ctags" };
+      return cachedSymbolEngine;
+    }
+  } catch {}
+
+  // 3. Check ast-grep / sg
+  try {
+    const ast = await detectAstEngine();
+    cachedSymbolEngine = { name: "ast-grep", binary: ast.binary };
+    return cachedSymbolEngine;
+  } catch {}
+
+  // 4. Fallback to ripgrep (or git grep)
+  try {
+    const text = await detectTextEngine();
+    cachedSymbolEngine = { name: "ripgrep", binary: text.binary };
+    return cachedSymbolEngine;
+  } catch {}
+
+  throw new Error(
+    "No symbol or text search engine available in system PATH (checked: 'ctags', 'ast-grep', 'rg', 'git')."
+  );
+}
+
 export function resolveBinary(name: "rg" | "ast-grep"): string {
   if (name === "rg") {
     return process.env.RIPGREP_PATH || "rg";

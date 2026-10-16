@@ -13,9 +13,10 @@ Designed specifically for AI Coding Agents (**Cursor**, **Claude Desktop**, **An
 
 ## ⚡ Highlights & Key Features
 
-- **5 Unified Tools (Zero Prefix Noise)**: Clean tool names without redundant prefixes: `search`, `replace`, `count`, `dump_tree`, and `list_files`.
+- **6 Unified Tools (Zero Prefix Noise)**: Clean tool names without redundant prefixes: `search`, `replace`, `count`, `find_symbols`, `dump_tree`, and `list_files`.
 - **Multi-Engine Driver Fallback (Zero Setup Friction)**: Automatically discovers and uses the best available CLI tool on your system without manual configuration:
   - **Text & Regex**: `ripgrep` (`rg`) ➜ `ugrep` ➜ `git grep` *(runs out of the box on any developer machine with Git installed!)*.
+  - **Symbol Search**: Universal Ctags (`ctags`) ➜ `ast-grep` ➜ `ripgrep` / `git grep` regex heuristic.
   - **AST Search**: `ast-grep` ➜ alias `sg`.
   - **File Listing**: `rg --files` ➜ `git ls-files` ➜ Native Node.js recursive directory walk.
 - **Hybrid 2-Tier Search (`type: "hybrid"`)**: Scans candidate files with ripgrep in ~30ms, then parses AST with ast-grep _only_ on matching files—giving **10x–50x speedups** over pure AST searches on large codebases.
@@ -230,7 +231,40 @@ count({ query: "catch ($ERR) { $$$ }", type: "ast", perFile: true });
 
 ---
 
-### 4. `dump_tree`
+
+---
+
+### 4. `find_symbols`
+
+Find and navigate code definitions (functions, classes, interfaces, methods, types, variables, structs, enums) across the codebase. Automatically selects the best available engine: **Universal Ctags** ➜ **ast-grep** ➜ **ripgrep / git-grep regex heuristic**.
+
+| Parameter        | Type      | Default   | Description                                                                                                    |
+| :--------------- | :-------- | :-------- | :------------------------------------------------------------------------------------------------------------- |
+| `name`           | `string`  | `""`      | Symbol name or substring to find (leave empty to list all symbols in target directory/file)                     |
+| `path`           | `string`  | `"."`     | Target directory or file path                                                                                  |
+| `kinds`          | `array`   | -         | Filter by symbol kinds: `"function"`, `"class"`, `"interface"`, `"method"`, `"variable"`, `"type"`, `"struct"`, `"enum"` |
+| `exactMatch`     | `boolean` | `false`   | If `true`, matches exact symbol name. If `false` (default), matches prefix or substring                        |
+| `filePattern`    | `string`  | -         | Glob pattern filter (e.g. `"*.ts"` or `"*.py"`)                                                                |
+| `fileType`       | `string`  | -         | Ripgrep file type filter (e.g. `"ts"`, `"py"`, `"rust"`)                                                    |
+| `excludePattern` | `string`  | -         | Glob pattern to exclude                                                                                        |
+| `noIgnore`       | `boolean` | `false`   | Search inside ignored files                                                                                    |
+| `maxResults`     | `number`  | `100`     | Maximum number of symbols to return                                                                            |
+| `outputFormat`   | `enum`    | `"table"` | Output format: `"table"` (default markdown table), `"compact"` (`file:line: [kind] name`), or `"json"`            |
+
+#### Examples:
+
+```typescript
+// Find exact function or class by name
+find_symbols({ name: "handleSearch", exactMatch: true });
+
+// List all functions in a module/directory
+find_symbols({ path: "src/handlers", kinds: ["function"] });
+
+// Search across whole repo with compact output
+find_symbols({ name: "Schema", outputFormat: "compact" });
+```
+
+### 5. `dump_tree`
 
 Inspect concrete syntax trees (CST) or AST node structures to craft precise ast-grep patterns.
 
@@ -252,7 +286,7 @@ dump_tree({
 
 ---
 
-### 5. `list_files`
+### 6. `list_files`
 
 Enumerate files matching glob patterns or file types without scanning file contents.
 
