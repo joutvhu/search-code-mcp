@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { runEngineCli } from "./cli/engineManager.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -26,9 +27,24 @@ process.on("SIGTERM", () => {
   process.exit(0);
 });
 
+declare const __APP_VERSION__: string | undefined;
+
+function getVersion(): string {
+  if (typeof __APP_VERSION__ !== "undefined") {
+    return __APP_VERSION__;
+  }
+  try {
+    const pkgUrl = new URL("../package.json", import.meta.url);
+    const pkg = JSON.parse(fs.readFileSync(pkgUrl, "utf8"));
+    return pkg.version || "1.0.0";
+  } catch {
+    return "1.0.0";
+  }
+}
+
 const server = new McpServer({
   name: "search-code-mcp",
-  version: "1.0.0",
+  version: getVersion(),
 });
 
 server.registerTool(

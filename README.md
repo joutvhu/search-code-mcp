@@ -29,7 +29,8 @@ Designed specifically for AI Coding Agents (**Cursor**, **Claude Desktop**, **Ki
 - **Flexible Path Handling**: Supports both relative paths (e.g. `"."`, `"./src"`) and absolute paths as input. By default, tool outputs return absolute paths. Set `RELATIVE_PATHS=true` in environment (or pass `--relative-paths`) to format output paths as clean relative paths to save LLM context window tokens.
 - **Token Protection & Truncation**: Automatically trims overly long single lines (`maxLineLength: 500`) and strips ANSI color codes to protect LLM context windows.
 - **Actionable Diagnostics**: Syntax errors in AST patterns or YAML rules return helpful self-correction hints (e.g. suggesting `dump_tree` or `stopBy: end`).
-- **Zero-Dependency Single-File Bundle**: Packaged with `tsup` into a self-contained single executable bundle for instant startup via `npx`.
+- **Agent Skill Included (`skills/search-code`)**: Pre-configured Agent Skill for Claude Code, Cursor, Antigravity, and Cline to automatically write AST patterns, YAML rules, and select optimal engines.
+- **Zero-Dependency Single-File Bundle**: Packaged with `esbuild` into a self-contained single executable bundle for instant startup via `npx`.
 
 ---
 
@@ -101,6 +102,22 @@ Add the following configuration to your client's MCP configuration file:
 | **Antigravity IDE** | `%USERPROFILE%\.gemini\config\mcp_config.json` |
 | **Windsurf** | `~/.codeium/windsurf/mcp_config.json` |
 | **Cline / Roo Code** | Click **MCP Servers** icon ➜ **Configure MCP Servers** |
+
+---
+
+### 🧠 Install Agent Skill (Optional but Recommended)
+
+Teach your AI coding agent (Cursor, Claude Code, Antigravity, Cline, Kiro) how to write high-precision `ast-grep` patterns, YAML rules, and choose the optimal search engine:
+
+```bash
+npx skills add joutvhu/search-code-mcp
+```
+
+Or install locally in your project:
+
+```bash
+npx skills add ./skills/search-code
+```
 
 ---
 
@@ -316,10 +333,13 @@ npm install
 # 3. Type check
 npm run check
 
-# 4. Build single-file bundle
+# 4. Run automated test suite
+npm test
+
+# 5. Build single-file bundle
 npm run build
 
-# 5. Test with MCP Inspector
+# 6. Test with MCP Inspector
 npx @modelcontextprotocol/inspector node dist/index.js
 ```
 

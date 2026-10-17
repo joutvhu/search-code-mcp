@@ -1,5 +1,7 @@
 import { formatMissingEngineError } from "./diagnostics.js";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 
 export interface ExecResult {
   stdout: string;
@@ -24,6 +26,27 @@ export interface ResolvedAstEngine {
 export interface ResolvedSymbolEngine {
   name: SymbolEngineName;
   binary: string;
+}
+
+function findWindowsNativeAstGrep(): string | null {
+  if (process.platform !== "win32") return null;
+  try {
+    const res = spawnSync("where.exe", ["ast-grep"], { encoding: "utf8" });
+    if (res.status === 0 && res.stdout) {
+      const lines = res.stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      for (const line of lines) {
+        if (line.toLowerCase().endsWith(".exe") && fs.existsSync(line)) {
+          return line;
+        }
+        const dir = path.dirname(line);
+        const nestedExe = path.join(dir, "node_modules", "@ast-grep", "cli", "ast-grep.exe");
+        if (fs.existsSync(nestedExe)) {
+          return nestedExe;
+        }
+      }
+    }
+  } catch {}
+  return null;
 }
 
 let cachedTextEngine: ResolvedTextEngine | null = null;
@@ -79,19 +102,44 @@ export async function detectAstEngine(): Promise<ResolvedAstEngine> {
     return cachedAstEngine;
   }
 
-  // 2. Check ast-grep
+  // 2. On Windows, prefer native .exe if discovered (e.g. from global @ast-grep/cli)
+  if (process.platform === "win32") {
+    const nativeExe = findWindowsNativeAstGrep();
+    if (nativeExe) {
+      cachedAstEngine = { name: "ast-grep", binary: nativeExe };
+      return cachedAstEngine;
+    }
+  }
+
+  // 3. Check ast-grep
   try {
     await safeSpawn("ast-grep", ["--version"]);
     cachedAstEngine = { name: "ast-grep", binary: "ast-grep" };
     return cachedAstEngine;
-  } catch {}
+  } catch {
+    if (process.platform === "win32") {
+      try {
+        await safeSpawn("ast-grep.cmd", ["--version"]);
+        cachedAstEngine = { name: "ast-grep", binary: "ast-grep.cmd" };
+        return cachedAstEngine;
+      } catch {}
+    }
+  }
 
-  // 3. Check alias 'sg'
+  // 4. Check alias 'sg'
   try {
     await safeSpawn("sg", ["--version"]);
     cachedAstEngine = { name: "sg", binary: "sg" };
     return cachedAstEngine;
-  } catch {}
+  } catch {
+    if (process.platform === "win32") {
+      try {
+        await safeSpawn("sg.cmd", ["--version"]);
+        cachedAstEngine = { name: "sg", binary: "sg.cmd" };
+        return cachedAstEngine;
+      } catch {}
+    }
+  }
 
   const errorMsg = await formatMissingEngineError("ast");
   throw new Error(errorMsg);
@@ -160,12 +208,29 @@ export function safeSpawn(
   return new Promise((resolve, reject) => {
     const isWindows = process.platform === "win32";
     let targetCmd = executable;
+    const isBatchScript = isWindows && (targetCmd.toLowerCase().endsWith(".cmd") || targetCmd.toLowerCase().endsWith(".bat"));
 
-    const child = spawn(targetCmd, args, {
-      shell: false,
-      cwd: cwd || process.cwd(),
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    // When running batch scripts on Windows, quote arguments containing spaces/special characters
+    const spawnArgs = isBatchScript
+      ? args.map((a) => (/[\s^&|<>"]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a))
+      : args;
+
+    let child: any;
+    try {
+      child = spawn(targetCmd, spawnArgs, {
+        shell: isBatchScript,
+        cwd: cwd || process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (err: any) {
+      if (isWindows && (err.code === "ENOENT" || err.code === "EINVAL") && !targetCmd.endsWith(".cmd") && !targetCmd.endsWith(".exe")) {
+        safeSpawn(`${targetCmd}.cmd`, args, inputText, cwd)
+          .then(resolve)
+          .catch(() => reject(err));
+        return;
+      }
+      return reject(err);
+    }
 
     let stdout = "";
     let stderr = "";
@@ -173,32 +238,28 @@ export function safeSpawn(
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
 
-    child.stdout.on("data", (chunk) => {
+    child.stdout.on("data", (chunk: string) => {
       stdout += chunk;
     });
 
-    child.stderr.on("data", (chunk) => {
+    child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
     });
 
     child.on("error", (err: any) => {
-      if (err.code === "ENOENT") {
+      if (isWindows && (err.code === "ENOENT" || err.code === "EINVAL") && !targetCmd.endsWith(".cmd") && !targetCmd.endsWith(".exe")) {
         // Try fallback to .cmd on Windows if not already tried
-        if (isWindows && !targetCmd.endsWith(".cmd") && !targetCmd.endsWith(".exe")) {
-          safeSpawn(`${targetCmd}.cmd`, args, inputText, cwd)
-            .then(resolve)
-            .catch(() => {
-              reject(err);
-            });
-          return;
-        }
-        reject(err);
-      } else {
-        reject(err);
+        safeSpawn(`${targetCmd}.cmd`, args, inputText, cwd)
+          .then(resolve)
+          .catch(() => {
+            reject(err);
+          });
+        return;
       }
+      reject(err);
     });
 
-    child.on("close", (code) => {
+    child.on("close", (code: number | null) => {
       const exitCode = code ?? 0;
       // Exit code 0 (success) and 1 (standard "no matches" from rg/ugrep/git-grep/ast-grep) are normal
       if (exitCode === 0) {
