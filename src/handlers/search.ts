@@ -91,6 +91,23 @@ export async function handleSearch(params: SearchParams) {
       matches = await runRipgrepSearch(params);
   }
 
+  // Deduplicate by file when files_only format is requested so pagination pages through files
+  if (params.outputFormat === "files_only") {
+    const seen = new Set<string>();
+    const uniqueFileMatches: MatchItem[] = [];
+    for (const m of matches) {
+      if (!seen.has(m.file)) {
+        seen.add(m.file);
+        uniqueFileMatches.push({
+          file: m.file,
+          startLine: m.startLine,
+          content: m.file,
+        });
+      }
+    }
+    matches = uniqueFileMatches;
+  }
+
   const totalMatches = matches.length;
   const startIndex = offset - 1;
   const endIndex = startIndex + limit;

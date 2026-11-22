@@ -128,30 +128,38 @@ export async function detectAstEngine(): Promise<ResolvedAstEngine> {
 
   // 3. Check ast-grep
   try {
-    await safeSpawn("ast-grep", ["--version"]);
-    cachedAstEngine = { name: "ast-grep", binary: "ast-grep" };
-    return cachedAstEngine;
+    const res = await safeSpawn("ast-grep", ["--version"]);
+    if (res.exitCode === 0 && /ast-grep/i.test(res.stdout)) {
+      cachedAstEngine = { name: "ast-grep", binary: "ast-grep" };
+      return cachedAstEngine;
+    }
   } catch {
     if (process.platform === "win32") {
       try {
-        await safeSpawn("ast-grep.cmd", ["--version"]);
-        cachedAstEngine = { name: "ast-grep", binary: "ast-grep.cmd" };
-        return cachedAstEngine;
+        const res = await safeSpawn("ast-grep.cmd", ["--version"]);
+        if (res.exitCode === 0 && /ast-grep/i.test(res.stdout)) {
+          cachedAstEngine = { name: "ast-grep", binary: "ast-grep.cmd" };
+          return cachedAstEngine;
+        }
       } catch {}
     }
   }
 
-  // 4. Check alias 'sg'
+  // 4. Check alias 'sg' (ensure it is ast-grep, not Linux shadow-utils /usr/bin/sg)
   try {
-    await safeSpawn("sg", ["--version"]);
-    cachedAstEngine = { name: "sg", binary: "sg" };
-    return cachedAstEngine;
+    const res = await safeSpawn("sg", ["--version"]);
+    if (res.exitCode === 0 && /ast-grep/i.test(res.stdout)) {
+      cachedAstEngine = { name: "sg", binary: "sg" };
+      return cachedAstEngine;
+    }
   } catch {
     if (process.platform === "win32") {
       try {
-        await safeSpawn("sg.cmd", ["--version"]);
-        cachedAstEngine = { name: "sg", binary: "sg.cmd" };
-        return cachedAstEngine;
+        const res = await safeSpawn("sg.cmd", ["--version"]);
+        if (res.exitCode === 0 && /ast-grep/i.test(res.stdout)) {
+          cachedAstEngine = { name: "sg", binary: "sg.cmd" };
+          return cachedAstEngine;
+        }
       } catch {}
     }
   }

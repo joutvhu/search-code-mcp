@@ -16,7 +16,7 @@ export async function handleReplace(params: ReplaceParams) {
     if (params.type === "text") {
       regex = new RegExp(params.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
     } else {
-      regex = new RegExp(params.query, "g");
+      regex = new RegExp(params.query, "gm");
     }
 
     const matches = await runRipgrepSearch({
@@ -55,36 +55,41 @@ export async function handleReplace(params: ReplaceParams) {
       let fileReplacements = 0;
       const modifiedContent = originalContent.replace(regex, (...args) => {
         const fullMatch = args[0] as string;
+        let repStr = params.replacement;
+
+        if (params.type !== "text") {
+          // Emulate standard String.prototype.replace substitution ($&, $$, $`, $', $1..$n, $<name>)
+          const offset = args[args.length - 2] as number;
+          const input = args[args.length - 1] as string;
+          const maybeGroups = typeof args[args.length - 1] === "object" ? (args[args.length - 1] as Record<string, string>) : undefined;
+          const captureArgs = maybeGroups ? args.slice(1, -3) : args.slice(1, -2);
+          const srcStr = maybeGroups ? (args[args.length - 2] as string) : input;
+          const matchOffset = maybeGroups ? (args[args.length - 3] as number) : offset;
+
+          repStr = params.replacement.replace(/\$(?:\$|&|`|'|\d{1,2}|<([^>]+)>)/g, (token, groupName) => {
+            if (token === "$$") return "$";
+            if (token === "$&") return fullMatch;
+            if (token === "$`") return srcStr.slice(0, matchOffset);
+            if (token === "$'") return srcStr.slice(matchOffset + fullMatch.length);
+            if (groupName) return maybeGroups?.[groupName] ?? "";
+            const idx = parseInt(token.slice(1), 10);
+            if (idx >= 1 && idx <= captureArgs.length) {
+              return captureArgs[idx - 1] ?? "";
+            }
+            return token;
+          });
+        }
+
+        if (repStr === fullMatch) {
+          return fullMatch;
+        }
+
         if (totalReplaced + fileReplacements >= maxLimit) {
           truncatedByLimit = true;
           return fullMatch;
         }
         fileReplacements++;
-
-        if (params.type === "text") {
-          return params.replacement;
-        }
-
-        // Emulate standard String.prototype.replace substitution ($&, $$, $`, $', $1..$n, $<name>)
-        const offset = args[args.length - 2] as number;
-        const input = args[args.length - 1] as string;
-        const maybeGroups = typeof args[args.length - 1] === "object" ? (args[args.length - 1] as Record<string, string>) : undefined;
-        const captureArgs = maybeGroups ? args.slice(1, -3) : args.slice(1, -2);
-        const srcStr = maybeGroups ? (args[args.length - 2] as string) : input;
-        const matchOffset = maybeGroups ? (args[args.length - 3] as number) : offset;
-
-        return params.replacement.replace(/\$(?:\$|&|`|'|\d{1,2}|<([^>]+)>)/g, (token, groupName) => {
-          if (token === "$$") return "$";
-          if (token === "$&") return fullMatch;
-          if (token === "$`") return srcStr.slice(0, matchOffset);
-          if (token === "$'") return srcStr.slice(matchOffset + fullMatch.length);
-          if (groupName) return maybeGroups?.[groupName] ?? "";
-          const idx = parseInt(token.slice(1), 10);
-          if (idx >= 1 && idx <= captureArgs.length) {
-            return captureArgs[idx - 1] ?? "";
-          }
-          return token;
-        });
+        return repStr;
       });
 
       if (fileReplacements > 0 && originalContent !== modifiedContent) {

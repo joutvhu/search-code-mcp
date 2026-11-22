@@ -1,6 +1,6 @@
 import { MatchItem } from "../utils/formatters.js";
-import { runRipgrepSearch } from "./ripgrep.js";
-import { runAstGrepPattern } from "./astgrep.js";
+import { runRipgrepFilesWithMatches } from "./ripgrep.js";
+import { runAstGrepPattern, FILE_TYPE_GLOBS } from "./astgrep.js";
 import { SearchParams } from "../types.js";
 import { searchSymbols } from "./symbols.js";
 
@@ -33,14 +33,24 @@ export async function runHybridSearch(params: SearchParams): Promise<MatchItem[]
 
   const primaryKeyword = keywords.sort((a, b) => b.length - a.length)[0];
 
-  const rgMatches = await runRipgrepSearch({
+  let filePattern = params.filePattern;
+  let fileType = params.fileType;
+  if (!filePattern && !fileType && params.language) {
+    const mapped = FILE_TYPE_GLOBS[params.language.toLowerCase()];
+    if (mapped) {
+      filePattern = mapped;
+    }
+  }
+
+  const candidateFiles = await runRipgrepFilesWithMatches({
     ...params,
     query: primaryKeyword,
     type: "text",
+    filePattern,
+    fileType,
     context: undefined,
   });
 
-  const candidateFiles = Array.from(new Set(rgMatches.map((m) => m.file)));
   if (candidateFiles.length === 0) {
     return [];
   }

@@ -202,6 +202,10 @@ export const CountSchema = z.object({
     .optional()
     .default("regex")
     .describe("Counting engine: 'regex' (default), 'text' (literal), or 'ast' (structural pattern)."),
+  caseSensitive: z
+    .boolean()
+    .optional()
+    .describe("[regex/text] Force case-sensitive (true) or case-insensitive (false). Omitting uses smart-case (insensitive unless query has uppercase)."),
   filePattern: z
     .string()
     .optional()

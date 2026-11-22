@@ -97,6 +97,37 @@ describe("Auxiliary Tools Tests", () => {
     assert.ok(filtered.content[0].text.includes("No symbols found"));
   });
 
+  it("should use smart-case in count matching search behavior", async () => {
+    const res = await handleCount({
+      query: "handlesearch",
+      type: "text",
+      path: "./src/index.ts",
+    });
+
+    assert.ok(!res.isError);
+    assert.ok(res.content[0].text.includes("Found 2 match(es)"));
+  });
+
+  it("should filter find_symbols by filePattern and classify type alias as type", async () => {
+    const res = await handleFindSymbols({
+      name: "SearchParams",
+      path: "./src/types.ts",
+    });
+
+    assert.ok(!res.isError);
+    assert.ok(res.content[0].text.includes("SearchParams"));
+    assert.ok(res.content[0].text.includes("`type`"), "SearchParams should be classified as type, not other");
+
+    const noMatchRes = await handleFindSymbols({
+      name: "SearchParams",
+      path: "./src",
+      filePattern: "*.json",
+    });
+
+    assert.ok(!noMatchRes.isError);
+    assert.ok(noMatchRes.content[0].text.includes("No symbols found"));
+  });
+
   it("should serve valid MCP stdio protocol from bundled dist/index.js", async () => {
     const result = await new Promise((resolve, reject) => {
       const proc = spawn("node", ["dist/index.js"], { stdio: ["pipe", "pipe", "pipe"] });

@@ -1,8 +1,14 @@
 import { FindSymbolsParams, SymbolItem, SymbolKind } from "../types.js";
 import { detectSymbolEngine, safeSpawn } from "../utils/exec.js";
 import { runRipgrepSearch } from "./ripgrep.js";
-import { runAstGrepPattern } from "./astgrep.js";
-import { resolveTarget, formatOutputPath } from "../utils/paths.js";
+import { runAstGrepPattern, FILE_TYPE_GLOBS } from "./astgrep.js";
+import {
+  resolveTarget,
+  formatOutputPath,
+  toRelativePath,
+  globToRegExp,
+  splitGlobList,
+} from "../utils/paths.js";
 
 function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -15,7 +21,7 @@ export function normalizeSymbolKind(raw: string): SymbolKind {
   if (["class", "c"].includes(raw)) return "class";
   if (["interface", "i"].includes(raw)) return "interface";
   if (["variable", "var", "v", "const", "constant", "let"].includes(raw)) return "variable";
-  if (["type", "typedef", "t"].includes(raw)) return "type";
+  if (["type", "typedef", "t", "alias"].includes(raw)) return "type";
   if (["struct", "s", "record"].includes(raw)) return "struct";
   if (["enum", "e", "enumerator"].includes(raw)) return "enum";
   if (["trait"].includes(raw)) return "trait";
@@ -97,9 +103,8 @@ async function runCtagsSymbols(
   }
 
   if (params.excludePattern) {
-    for (const pat of params.excludePattern.split(",")) {
-      const trimmed = pat.trim();
-      if (trimmed) args.push(`--exclude=${trimmed}`);
+    for (const pat of splitGlobList(params.excludePattern)) {
+      args.push(`--exclude=${pat.replace(/^!/, "")}`);
     }
   }
 
@@ -109,9 +114,18 @@ async function runCtagsSymbols(
   const lines = res.stdout.split(/\r?\n/);
   const items: SymbolItem[] = [];
 
-  const targetName = (params.name || "").trim().toLowerCase();
+  const rawTargetName = (params.name || "").trim();
+  const targetName = rawTargetName.toLowerCase();
   const allowedKinds = params.kinds?.map((k) => k.toLowerCase());
   const maxResults = params.maxResults || 100;
+
+  const includeRegexes = params.filePattern
+    ? splitGlobList(params.filePattern).map(globToRegExp)
+    : [];
+  const typeGlob = params.fileType
+    ? FILE_TYPE_GLOBS[params.fileType.toLowerCase()] || `*.${params.fileType}`
+    : null;
+  const typeRegex = typeGlob ? globToRegExp(typeGlob) : null;
 
   for (const line of lines) {
     if (!line.trim()) continue;
@@ -119,10 +133,16 @@ async function runCtagsSymbols(
       const tag = JSON.parse(line);
       if (tag._type !== "tag") continue;
 
+      if (tag.path) {
+        const rel = toRelativePath(tag.path, basePath);
+        if (includeRegexes.length > 0 && !includeRegexes.some((rx) => rx.test(rel))) continue;
+        if (typeRegex && !typeRegex.test(rel)) continue;
+      }
+
       const name: string = tag.name || "";
-      if (targetName) {
+      if (rawTargetName) {
         if (params.exactMatch) {
-          if (name.toLowerCase() !== targetName) continue;
+          if (name !== rawTargetName) continue;
         } else {
           if (!name.toLowerCase().includes(targetName)) continue;
         }
@@ -150,7 +170,8 @@ async function runCtagsSymbols(
 }
 
 async function runAstGrepSymbols(params: Partial<FindSymbolsParams>): Promise<SymbolItem[]> {
-  const targetName = (params.name || "").trim();
+  const rawTargetName = (params.name || "").trim();
+  const targetLower = rawTargetName.toLowerCase();
   const allowedKinds = params.kinds?.map((k) => k.toLowerCase());
 
   // Only handle function queries via ast-grep when kinds are unrestricted or include 'function'
@@ -160,7 +181,7 @@ async function runAstGrepSymbols(params: Partial<FindSymbolsParams>): Promise<Sy
 
   const matches = await runAstGrepPattern({
     path: params.path,
-    query: targetName && params.exactMatch ? `function ${targetName}($$$)` : "function $NAME($$$)",
+    query: rawTargetName && params.exactMatch ? `function ${rawTargetName}($$$)` : "function $NAME($$$)",
     filePattern: params.filePattern,
     fileType: params.fileType,
     excludePattern: params.excludePattern,
@@ -168,19 +189,19 @@ async function runAstGrepSymbols(params: Partial<FindSymbolsParams>): Promise<Sy
   });
 
   const items: SymbolItem[] = [];
-  const targetLower = targetName.toLowerCase();
   const maxResults = params.maxResults || 100;
 
   for (const m of matches) {
     const firstLine = m.content.split(/\r?\n/)[0] || "";
     const extracted = extractSymbolFromLine(firstLine);
-    const name = extracted?.name || targetName || "anonymous";
+    const name = extracted?.name || rawTargetName || "anonymous";
     const kind = extracted?.kind || "function";
 
-    if (targetLower) {
-      const nameLower = name.toLowerCase();
-      if (params.exactMatch ? nameLower !== targetLower : !nameLower.includes(targetLower)) {
-        continue;
+    if (rawTargetName) {
+      if (params.exactMatch) {
+        if (name !== rawTargetName) continue;
+      } else {
+        if (!name.toLowerCase().includes(targetLower)) continue;
       }
     }
 
@@ -203,14 +224,18 @@ async function runAstGrepSymbols(params: Partial<FindSymbolsParams>): Promise<Sy
 }
 
 async function runRipgrepSymbols(params: Partial<FindSymbolsParams>): Promise<SymbolItem[]> {
-  const targetName = (params.name || "").trim();
+  const rawTargetName = (params.name || "").trim();
+  const targetLower = rawTargetName.toLowerCase();
   const allowedKinds = params.kinds?.map((k) => k.toLowerCase());
   const maxResults = params.maxResults || 100;
 
   let query = "\\b(function|class|interface|type|enum|struct|trait|def|fn|func|const|let|var)\\b";
-  if (targetName) {
-    const escaped = escapeRegExp(targetName);
+  if (rawTargetName) {
+    const escaped = escapeRegExp(rawTargetName);
     query = params.exactMatch ? `\\b${escaped}\\b` : escaped;
+  } else {
+    // Outline mode: include methods and declarations
+    query = "\\b(function|class|interface|type|enum|struct|trait|def|fn|func|const|let|var)\\b|(?:public|private|protected|async)\\s+[a-zA-Z0-9_]+\\s*\\(";
   }
 
   const rgMatches = await runRipgrepSearch({
@@ -226,19 +251,17 @@ async function runRipgrepSymbols(params: Partial<FindSymbolsParams>): Promise<Sy
   });
 
   const items: SymbolItem[] = [];
-  const targetLower = targetName.toLowerCase();
 
   for (const match of rgMatches) {
     const line = match.content.trim();
     const extracted = extractSymbolFromLine(line);
     if (!extracted) continue;
 
-    if (targetLower) {
-      const matchNameLower = extracted.name.toLowerCase();
+    if (rawTargetName) {
       if (params.exactMatch) {
-        if (matchNameLower !== targetLower) continue;
+        if (extracted.name !== rawTargetName) continue;
       } else {
-        if (!matchNameLower.includes(targetLower)) continue;
+        if (!extracted.name.toLowerCase().includes(targetLower)) continue;
       }
     }
 
@@ -276,7 +299,7 @@ export async function searchSymbols(
   if (engine.name === "ast-grep" && params.name) {
     try {
       const symbols = await runAstGrepSymbols(params);
-      if (symbols.length > 0) {
+      if (symbols.length > 0 && params.kinds?.length === 1 && params.kinds[0] === "function") {
         return { symbols, engine: "ast-grep" };
       }
     } catch {}

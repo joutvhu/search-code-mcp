@@ -50,14 +50,19 @@ export async function probeSystemCapabilities(): Promise<SystemCapabilities> {
   }
   if (!ast) {
     try {
-      await safeSpawn("ast-grep", ["--version"]);
-      ast = true;
-    } catch {
-      try {
-        await safeSpawn("sg", ["--version"]);
+      const res = await safeSpawn("ast-grep", ["--version"]);
+      if (res.exitCode === 0 && /ast-grep/i.test(res.stdout)) {
         ast = true;
-      } catch {}
-    }
+      }
+    } catch {}
+  }
+  if (!ast) {
+    try {
+      const res = await safeSpawn("sg", ["--version"]);
+      if (res.exitCode === 0 && /ast-grep/i.test(res.stdout)) {
+        ast = true;
+      }
+    } catch {}
   }
 
   let symbol = false;

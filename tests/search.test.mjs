@@ -148,4 +148,47 @@ rule:
     assert.equal(res.isError, true);
     assert.ok(res.content[0].text.includes("expired or not found"));
   });
+
+  it("should handle brace expansion in filePattern for ast-grep and ripgrep", async () => {
+    const res = await handleSearch({
+      query: "const $A = $B",
+      type: "ast",
+      path: "./src",
+      language: "typescript",
+      filePattern: "*.{ts,tsx}",
+      limit: 2,
+    });
+
+    assert.ok(!res.isError, `Should not error on brace glob: ${res.content?.[0]?.text}`);
+    assert.ok(res.content[0].text.includes("Found"));
+  });
+
+  it("should return valid JSON when search has 0 matches with outputFormat json", async () => {
+    const res = await handleSearch({
+      query: "nonexistent_pattern_random_xyz_987",
+      type: "text",
+      path: "./src",
+      outputFormat: "json",
+    });
+
+    assert.ok(!res.isError);
+    const parsed = JSON.parse(res.content[0].text);
+    assert.equal(parsed.totalMatches, 0);
+    assert.deepEqual(parsed.matches, []);
+  });
+
+  it("should paginate files_only format by unique files", async () => {
+    const res = await handleSearch({
+      query: "export",
+      type: "text",
+      path: "./src",
+      outputFormat: "files_only",
+      limit: 3,
+    });
+
+    assert.ok(!res.isError);
+    const lines = res.content[0].text.split("\n").filter((l) => l && !l.startsWith("─") && !l.startsWith("📌") && !l.startsWith("👉"));
+    assert.equal(lines.length, 3, "Should show 3 distinct files");
+    assert.ok(res.content[0].text.includes("Showing files 1-3 of"));
+  });
 });

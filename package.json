@@ -17,7 +17,7 @@
     "bump:patch": "npm version patch --no-git-tag-version && npm install",
     "bump:minor": "npm version minor --no-git-tag-version && npm install",
     "bump:major": "npm version major --no-git-tag-version && npm install",
-    "local:publish:": "node scripts/publish-local.mjs",
+    "local:publish": "node scripts/publish-local.mjs",
     "local:pack": "node scripts/publish-local.mjs --pack-only",
     "local:uninstall": "node scripts/publish-local.mjs --uninstall"
   },

@@ -216,7 +216,8 @@ server.registerTool(
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.includes("engine") || args.includes("--engine") || args.includes("doctor")) {
+  const firstArg = args[0]?.toLowerCase();
+  if (firstArg === "engine" || firstArg === "--engine" || firstArg === "doctor") {
     await runEngineCli();
     process.exit(0);
   }

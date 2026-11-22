@@ -146,3 +146,78 @@ export function formatOutputPath(filePath: string, basePath?: string): string {
 
   return absFile;
 }
+
+/**
+ * Split a comma-separated list of glob patterns, respecting nested brace expansions like '*.{ts,tsx}'.
+ */
+export function splitGlobList(pattern?: string): string[] {
+  if (!pattern) return [];
+  const result: string[] = [];
+  let depth = 0;
+  let current = "";
+
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === "{" || ch === "[") {
+      depth++;
+      current += ch;
+    } else if (ch === "}" || ch === "]") {
+      depth = Math.max(0, depth - 1);
+      current += ch;
+    } else if (ch === "," && depth === 0) {
+      const trimmed = current.trim();
+      if (trimmed) result.push(trimmed);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+
+  const trimmed = current.trim();
+  if (trimmed) result.push(trimmed);
+  return result;
+}
+
+/**
+ * Convert simple glob pattern (supporting **, *, ?, {a,b}) to RegExp
+ */
+export function globToRegExp(glob: string): RegExp {
+  const normalized = glob.replace(/\\/g, "/").trim();
+  let regexStr = "";
+  let i = 0;
+  while (i < normalized.length) {
+    const ch = normalized[i];
+    if (ch === "*") {
+      if (normalized[i + 1] === "*") {
+        if (normalized[i + 2] === "/") {
+          regexStr += "(?:.*/)?";
+          i += 3;
+          continue;
+        }
+        regexStr += ".*";
+        i += 2;
+        continue;
+      }
+      regexStr += "[^/]*";
+    } else if (ch === "?") {
+      regexStr += "[^/]";
+    } else if (ch === "{") {
+      const closeIdx = normalized.indexOf("}", i);
+      if (closeIdx !== -1) {
+        const inner = normalized.slice(i + 1, closeIdx);
+        const parts = inner.split(",").map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+        regexStr += `(?:${parts.join("|")})`;
+        i = closeIdx + 1;
+        continue;
+      }
+      regexStr += "\\{";
+    } else {
+      regexStr += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+    i++;
+  }
+
+  const hasSlash = normalized.includes("/");
+  return hasSlash ? new RegExp(`^${regexStr}$`) : new RegExp(`(?:^|/)${regexStr}$`);
+}
+

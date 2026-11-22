@@ -19,7 +19,7 @@ function runNpm(args, options = {}) {
 function printHelp() {
   console.log(`
 Usage:
-  npm run publish:local [options]
+  npm run local:publish [options]
   node scripts/publish-local.mjs [options]
 
 Options:
@@ -163,5 +163,5 @@ console.log(`     npx search-code-mcp`);
 console.log(`  3. Check global package list:`);
 console.log(`     npm list -g --depth=0 ${pkg.name}`);
 console.log(`  4. Uninstall when done:`);
-console.log(`     npm run uninstall:local`);
+console.log(`     npm run local:uninstall`);
 console.log("\n" + "=".repeat(60) + "\n");

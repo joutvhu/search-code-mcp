@@ -152,6 +152,39 @@ describe("Replace Handler Tests", () => {
     assert.equal(fs.readFileSync(testFile, "utf8"), "console.log('b');\n");
   });
 
+  it("should replace all matching lines when using multiline anchors in regex mode", async () => {
+    const dir = makeTempDir();
+    const file = path.join(dir, "multiline-anchors.ts");
+    fs.writeFileSync(
+      file,
+      [
+        "import a from 'a';",
+        "const x = 1;",
+        "import b from 'b';",
+      ].join("\n") + "\n",
+      "utf8"
+    );
+
+    const res = await handleReplace({
+      query: "^import ",
+      replacement: "// import ",
+      type: "regex",
+      path: file,
+      dryRun: false,
+    });
+
+    assert.ok(!res.isError);
+    assert.ok(res.content[0].text.includes("2 replacement(s)"));
+    assert.equal(
+      fs.readFileSync(file, "utf8"),
+      [
+        "// import a from 'a';",
+        "const x = 1;",
+        "// import b from 'b';",
+      ].join("\n") + "\n"
+    );
+  });
+
   it("should throw error on invalid regex in regex replace mode", async () => {
     await assert.rejects(
       () =>

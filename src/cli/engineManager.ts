@@ -2,6 +2,7 @@ import { spawnSync, spawn } from "node:child_process";
 import * as readline from "node:readline";
 import * as readlinePromises from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import { findWindowsNativeAstGrep } from "../utils/exec.js";
 
 export interface EngineStatus {
   name: string;
@@ -14,19 +15,40 @@ export interface EngineStatus {
 function checkToolVersion(tool: string): string | null {
   try {
     const isWin = process.platform === "win32";
-    const target = isWin && !tool.endsWith(".exe") && !tool.endsWith(".cmd") ? `${tool}.cmd` : tool;
+    let actualTool = tool;
+
+    if (tool === "rg" && process.env.RIPGREP_PATH) {
+      actualTool = process.env.RIPGREP_PATH;
+    } else if (tool === "ast-grep" && process.env.AST_GREP_PATH) {
+      actualTool = process.env.AST_GREP_PATH;
+    } else if (tool === "ctags" && process.env.CTAGS_PATH) {
+      actualTool = process.env.CTAGS_PATH;
+    }
+
+    if (isWin && tool === "ast-grep") {
+      const native = findWindowsNativeAstGrep();
+      if (native) actualTool = native;
+    }
+
+    const target = isWin && !actualTool.endsWith(".exe") && !actualTool.endsWith(".cmd") ? `${actualTool}.cmd` : actualTool;
 
     let res = isWin
-      ? spawnSync(`${tool} --version`, { encoding: "utf8", shell: true })
-      : spawnSync(tool, ["--version"], { encoding: "utf8" });
+      ? spawnSync(`${actualTool} --version`, { encoding: "utf8", shell: true })
+      : spawnSync(actualTool, ["--version"], { encoding: "utf8" });
 
     if (res.status === 0 && res.stdout) {
+      if ((tool === "sg" || tool === "ast-grep") && !/ast-grep/i.test(res.stdout)) {
+        return null;
+      }
       return res.stdout.split("\n")[0].trim();
     }
 
-    if (isWin && target !== tool) {
+    if (isWin && target !== actualTool) {
       res = spawnSync(`${target} --version`, { encoding: "utf8", shell: true });
       if (res.status === 0 && res.stdout) {
+        if ((tool === "sg" || tool === "ast-grep") && !/ast-grep/i.test(res.stdout)) {
+          return null;
+        }
         return res.stdout.split("\n")[0].trim();
       }
     }

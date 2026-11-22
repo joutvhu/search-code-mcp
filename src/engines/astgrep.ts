@@ -4,9 +4,9 @@ import { detectAstEngine, safeSpawn } from "../utils/exec.js";
 import { buildUnifiedDiff, MatchItem } from "../utils/formatters.js";
 import { detectLanguageFromPath, enhanceAstGrepError } from "../utils/validation.js";
 import { SearchParams, ReplaceParams, DumpTreeParams } from "../types.js";
-import { resolveTarget, formatOutputPath } from "../utils/paths.js";
+import { resolveTarget, formatOutputPath, splitGlobList } from "../utils/paths.js";
 
-const FILE_TYPE_GLOBS: Record<string, string> = {
+export const FILE_TYPE_GLOBS: Record<string, string> = {
   ts: "*.{ts,tsx,mts,cts}",
   js: "*.{js,jsx,mjs,cjs}",
   py: "*.{py,pyi}",
@@ -48,9 +48,8 @@ function appendAstFilterArgs(
   }
 
   if (params.filePattern) {
-    for (const pat of params.filePattern.split(",")) {
-      const trimmed = pat.trim();
-      if (trimmed) args.push("--globs", trimmed);
+    for (const pat of splitGlobList(params.filePattern)) {
+      if (pat) args.push("--globs", pat);
     }
   } else if (params.fileType) {
     const mapped = FILE_TYPE_GLOBS[params.fileType.toLowerCase()];
@@ -58,10 +57,9 @@ function appendAstFilterArgs(
   }
 
   if (params.excludePattern) {
-    for (const pat of params.excludePattern.split(",")) {
-      const trimmed = pat.trim();
-      if (trimmed) {
-        args.push("--globs", trimmed.startsWith("!") ? trimmed : `!${trimmed}`);
+    for (const pat of splitGlobList(params.excludePattern)) {
+      if (pat) {
+        args.push("--globs", pat.startsWith("!") ? pat : `!${pat}`);
       }
     }
   }

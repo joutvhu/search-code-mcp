@@ -40,6 +40,20 @@ export function formatMatchItems(
   cacheInfo?: CacheFormatInfo
 ): string {
   if (!matches || matches.length === 0) {
+    if (outputFormat === "json") {
+      return JSON.stringify(
+        {
+          totalMatches: 0,
+          offset: cacheInfo?.offset ?? 1,
+          showing: 0,
+          searchId: cacheInfo?.searchId ?? null,
+          nextOffset: null,
+          matches: [],
+        },
+        null,
+        2
+      );
+    }
     return "No matches found.";
   }
 
@@ -53,7 +67,7 @@ export function formatMatchItems(
     if (cacheInfo?.hasMore) {
       output +=
         `\n\n─────────────────────────────────────────────────────────────\n` +
-        `📌 Showing matches ${startOffset}-${endOffset} of ${totalCount} (${uniqueFiles.length} files in this page).\n` +
+        `📌 Showing files ${startOffset}-${endOffset} of ${totalCount}.\n` +
         `👉 View more: search({ searchId: "${cacheInfo.searchId}", offset: ${cacheInfo.nextOffset} })`;
     }
     return output;
