@@ -1,6 +1,6 @@
 {
   "name": "search-code-mcp",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Unified high-performance code search and structural refactoring MCP server combining ripgrep and ast-grep",
   "main": "dist/index.js",
   "type": "module",
@@ -12,7 +12,14 @@
     "start": "node dist/index.js",
     "dev": "tsc -w",
     "check": "tsc --noEmit",
-    "test": "npm run check && npm run build && node scripts/test.mjs"
+    "test": "npm run check && npm run build && node scripts/test.mjs",
+    "bump": "npm version patch --no-git-tag-version && npm install",
+    "bump:patch": "npm version patch --no-git-tag-version && npm install",
+    "bump:minor": "npm version minor --no-git-tag-version && npm install",
+    "bump:major": "npm version major --no-git-tag-version && npm install",
+    "local:publish:": "node scripts/publish-local.mjs",
+    "local:pack": "node scripts/publish-local.mjs --pack-only",
+    "local:uninstall": "node scripts/publish-local.mjs --uninstall"
   },
   "engines": {
     "node": ">=18.0.0"
