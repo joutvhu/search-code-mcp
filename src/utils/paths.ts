@@ -175,7 +175,7 @@ export function splitGlobList(pattern?: string): string[] {
 
   const trimmed = current.trim();
   if (trimmed) result.push(trimmed);
-  return result;
+  return result.map((p) => p.replace(/\\/g, "/"));
 }
 
 /**

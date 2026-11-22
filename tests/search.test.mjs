@@ -52,7 +52,7 @@ describe("Search Handler Tests", () => {
     // Line 121 is inside runAstGrepPattern
     // Line 121's context before should NOT bleed into Line 3's context after
     assert.ok(text.includes("> 3:"));
-    assert.ok(text.includes("> 118:"));
+    assert.ok(/> \d+:\s+const result = await safeSpawn/.test(text));
     assert.ok(!text.includes("117-   try {\n\nsrc"), "Context lines of next match should not be attached to match at line 3");
   });
 
@@ -205,5 +205,29 @@ rule:
     const lines = res.content[0].text.split("\n").filter((l) => l && !l.startsWith("─") && !l.startsWith("📌") && !l.startsWith("👉"));
     assert.equal(lines.length, 3, "Should show 3 distinct files");
     assert.ok(res.content[0].text.includes("Showing files 1-3 of"));
+  });
+
+  it("should normalize Windows backslashes in filePattern", async () => {
+    const res = await handleSearch({
+      query: "handleSearch",
+      type: "text",
+      path: "./src",
+      filePattern: "**\\handlers\\*.ts",
+    });
+
+    assert.ok(!res.isError);
+    assert.ok(res.content[0].text.includes("handleSearch"));
+  });
+
+  it("should support hybrid search with full language name typescript", async () => {
+    const res = await handleSearch({
+      query: "const $NAME = $A ? $B : $C",
+      type: "hybrid",
+      path: "./src/utils",
+      language: "typescript",
+    });
+
+    assert.ok(!res.isError);
+    assert.ok(res.content[0].text.includes("paths.ts"));
   });
 });

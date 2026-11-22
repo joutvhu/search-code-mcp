@@ -232,4 +232,35 @@ describe("Replace Handler Tests", () => {
       /Invalid regular expression|SyntaxError/i
     );
   });
+
+  it("should reject empty query for replace", async () => {
+    const res = await handleReplace({
+      query: "",
+      replacement: "bar",
+      type: "text",
+      path: "./src/index.ts",
+      dryRun: true,
+    });
+
+    assert.equal(res.isError, true);
+    assert.ok(res.content[0].text.includes("cannot be empty"));
+  });
+
+  it("should support case-insensitive replacement when caseSensitive is false", async () => {
+    const dir = makeTempDir();
+    const file = path.join(dir, "case.ts");
+    fs.writeFileSync(file, "Hello WORLD\n", "utf8");
+
+    const res = await handleReplace({
+      query: "world",
+      replacement: "there",
+      type: "text",
+      path: file,
+      caseSensitive: false,
+      dryRun: false,
+    });
+
+    assert.ok(!res.isError);
+    assert.equal(fs.readFileSync(file, "utf8"), "Hello there\n");
+  });
 });

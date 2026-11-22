@@ -5,6 +5,7 @@ import { handleCount } from "../.test-dist/handlers/count.js";
 import { handleDumpTree } from "../.test-dist/handlers/dumpTree.js";
 import { handleListFiles } from "../.test-dist/handlers/listFiles.js";
 import { handleFindSymbols } from "../.test-dist/handlers/findSymbols.js";
+import { extractSymbolFromLine } from "../.test-dist/engines/symbols.js";
 
 describe("Auxiliary Tools Tests", () => {
   it("should count matches with ripgrep including filename on single file", async () => {
@@ -206,5 +207,27 @@ describe("Auxiliary Tools Tests", () => {
 
     assert.ok(!callMsg.result.isError);
     assert.ok(callMsg.result.content[0].text.includes("6 match(es)"));
+  });
+
+  it("should extract symbols with OOP modifiers and Java throws clause", () => {
+    const classSym = extractSymbolFromLine("public class UserService {");
+    assert.ok(classSym);
+    assert.equal(classSym.kind, "class");
+    assert.equal(classSym.name, "UserService");
+
+    const ifaceSym = extractSymbolFromLine("public interface PaymentGateway {");
+    assert.ok(ifaceSym);
+    assert.equal(ifaceSym.kind, "interface");
+    assert.equal(ifaceSym.name, "PaymentGateway");
+
+    const enumSym = extractSymbolFromLine("public enum OrderStatus {");
+    assert.ok(enumSym);
+    assert.equal(enumSym.kind, "enum");
+    assert.equal(enumSym.name, "OrderStatus");
+
+    const methodSym = extractSymbolFromLine("public void process() throws IOException {");
+    assert.ok(methodSym);
+    assert.equal(methodSym.kind, "method");
+    assert.equal(methodSym.name, "process");
   });
 });

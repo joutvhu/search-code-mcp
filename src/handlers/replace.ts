@@ -7,16 +7,24 @@ import { runRipgrepFilesWithMatches } from "../engines/ripgrep.js";
 import { resolveTarget, formatOutputPath } from "../utils/paths.js";
 
 export async function handleReplace(params: ReplaceParams) {
+  if (!params.query) {
+    return {
+      isError: true,
+      content: [{ type: "text", text: "Error: 'query' parameter is required and cannot be empty for replace." }],
+    };
+  }
+
   const isDryRun = params.dryRun !== false;
   const maxLimit = params.maxReplacements ?? 50;
 
   if (params.type === "regex" || params.type === "text") {
     // Validate regex upfront so invalid JS RegExp fails loudly instead of silently
     let regex: RegExp;
+    const flags = params.caseSensitive === false ? (params.type === "text" ? "gi" : "gim") : (params.type === "text" ? "g" : "gm");
     if (params.type === "text") {
-      regex = new RegExp(params.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
+      regex = new RegExp(params.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), flags);
     } else {
-      regex = new RegExp(params.query, "gm");
+      regex = new RegExp(params.query, flags);
     }
 
     const candidateFiles = await runRipgrepFilesWithMatches({
@@ -25,7 +33,7 @@ export async function handleReplace(params: ReplaceParams) {
       type: params.type,
       filePattern: params.filePattern,
       excludePattern: params.excludePattern,
-      caseSensitive: true,
+      caseSensitive: params.caseSensitive ?? true,
       multiline: params.type === "regex" && (params.query.includes("\n") || /\\n|\\[sS]/.test(params.query)),
     });
 

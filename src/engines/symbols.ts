@@ -82,7 +82,7 @@ export function extractSymbolFromLine(line: string, includeLocals: boolean = fal
 
   // 2. Standard declaration keywords (JS/TS, Python, Rust, Go, Java, C#, PHP, etc.)
   m = trimmed.match(
-    /^(?:export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:pub(?:\([^)]*\))?\s+)?(function\*?|class|interface|type|enum|struct|trait|def|fn|func)\s+([a-zA-Z0-9_$]+)/
+    /^(?:(?:export|default|declare|abstract|async|public|private|protected|internal|final|sealed|static)\s+)*(?:pub(?:\([^)]*\))?\s+)?(function\*?|class|interface|type|enum|struct|trait|def|fn|func)\s+([a-zA-Z0-9_$]+)/
   );
   if (m) {
     return { kind: normalizeSymbolKind(m[1]), name: m[2] };
@@ -106,7 +106,7 @@ export function extractSymbolFromLine(line: string, includeLocals: boolean = fal
 
   // 5. Method definitions in OOP languages (Java, C#, C++, TS/JS class methods)
   m = trimmed.match(
-    /^(?:(?:public|private|protected|static|override|readonly|virtual|final|async)\s+)*(?:[a-zA-Z0-9_<>\[\]]+\s+)?([a-zA-Z0-9_]+)\s*\([^)]*\)\s*(?::\s*[^{]+)?\{/
+    /^(?:(?:public|private|protected|static|override|readonly|virtual|final|async)\s+)*(?:[a-zA-Z0-9_<>\[\]]+\s+)?([a-zA-Z0-9_]+)\s*\([^)]*\)\s*(?::\s*[^{]+|\bthrows\s+[^{]+)?\{/
   );
   if (m && !CONTROL_FLOW_KEYWORDS.has(m[1])) {
     return { kind: "method", name: m[1] };
@@ -124,7 +124,7 @@ async function runCtagsSymbols(
 
   let res: ExecResult;
   if (isFile) {
-    const args = ["--output-format=json", "--fields=+n+K+S+s", "--quiet=yes", "-f", "-", targetPath];
+    const args = ["--output-format=json", "--fields=+n+K+S+s", "--extras=-{anonymous}", "--quiet=yes", "-f", "-", targetPath];
     res = await safeSpawn(binary, args, undefined, basePath);
   } else {
     // List matching non-ignored files using ripgrep so ctags doesn't scan .git, node_modules, dist, etc.
@@ -136,7 +136,7 @@ async function runCtagsSymbols(
     if (files.length === 0) {
       return [];
     }
-    const args = ["--output-format=json", "--fields=+n+K+S+s", "--quiet=yes", "-L", "-", "-f", "-"];
+    const args = ["--output-format=json", "--fields=+n+K+S+s", "--extras=-{anonymous}", "--quiet=yes", "-L", "-", "-f", "-"];
     res = await safeSpawn(binary, args, files.join("\n"), basePath);
   }
 
@@ -166,8 +166,8 @@ async function runCtagsSymbols(
       const name: string = tag.name || "";
       if (!name) continue;
 
-      // Skip numeric literal tags like _000
-      if (/^_\d+$/.test(name)) continue;
+      // Skip numeric literal tags like _000 and compiler-generated anonymous entities
+      if (/^_\d+$/.test(name) || /^Anonymous(?:Class|Function|Object|Struct|Enum|Method)/i.test(name)) continue;
 
       // Exclude local variables inside functions/methods unless includeLocals is explicitly true
       const isLocal = tag.scopeKind === "function" || tag.scopeKind === "method";

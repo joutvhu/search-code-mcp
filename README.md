@@ -192,6 +192,7 @@ Structural code refactoring and replacement engine. Supports AST rewrite pattern
 | `type`            | `enum`    | `"ast"`      | Replacement mode: `"ast"` (structural rewrite), `"regex"`, `"text"`     |
 | `dryRun`          | `boolean` | `true`       | If `true`, outputs unified diff preview without modifying files on disk |
 | `maxReplacements` | `number`  | `50`         | Safety limit on maximum matches to replace                              |
+| `caseSensitive`   | `boolean` | `true`       | Case sensitivity for `"regex"` or `"text"` replacements                 |
 | `filePattern`     | `string`  | -            | Glob pattern to filter files                                            |
 | `excludePattern`  | `string`  | -            | Glob pattern to exclude                                                 |
 | `language`        | `string`  | auto         | Programming language for AST mode                                       |
@@ -228,6 +229,7 @@ Count matching occurrences across files without returning match content, saving 
 | `path`           | `string`  | `"."`        | Target directory or file                  |
 | `type`           | `enum`    | `"regex"`    | Engine mode: `"regex"`, `"text"`, `"ast"` |
 | `perFile`        | `boolean` | `false`      | Show breakdown of matches per file        |
+| `caseSensitive`  | `boolean` | smart-case   | Case sensitivity (`regex`/`text`)         |
 | `filePattern`    | `string`  | -            | Glob pattern filter                       |
 | `excludePattern` | `string`  | -            | Glob exclude filter                       |
 | `noIgnore`       | `boolean` | `false`      | Search inside ignored files               |
@@ -250,7 +252,7 @@ Find and navigate code definitions (functions, classes, interfaces, methods, typ
 | :--------------- | :-------- | :-------- | :------------------------------------------------------------------------------------------------------------- |
 | `name`           | `string`  | `""`      | Symbol name or substring to find (leave empty to list all symbols in target directory/file)                     |
 | `path`           | `string`  | `"."`     | Target directory or file path                                                                                  |
-| `kinds`          | `array`   | -         | Filter by symbol kinds: `"function"`, `"class"`, `"interface"`, `"method"`, `"variable"`, `"type"`, `"struct"`, `"enum"` |
+| `kinds`          | `array`   | -         | Filter by symbol kinds: `"function"`, `"class"`, `"interface"`, `"method"`, `"variable"`, `"type"`, `"struct"`, `"enum"`, `"trait"`, `"module"`, `"other"` |
 | `exactMatch`     | `boolean` | `false`   | If `true`, matches exact symbol name. If `false` (default), matches prefix or substring                        |
 | `filePattern`    | `string`  | -         | Glob pattern to filter files (e.g. `"*.ts"` or `"*.py"`)                                                                |
 | `excludePattern` | `string`  | -         | Glob pattern to exclude                                                                                        |

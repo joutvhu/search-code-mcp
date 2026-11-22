@@ -64,11 +64,12 @@ function parseRgJsonOutput(stdout: string, basePath?: string, requestedContext: 
           lastMatch.contextAfterCount++;
         } else {
           lastMatch = null;
-          if (requestedContext > 0) {
-            pendingContextBefore.push({ line: lineNumber, text: rawText });
-            if (pendingContextBefore.length > requestedContext) {
-              pendingContextBefore.shift();
-            }
+        }
+
+        if (requestedContext > 0) {
+          pendingContextBefore.push({ line: lineNumber, text: rawText });
+          if (pendingContextBefore.length > requestedContext) {
+            pendingContextBefore.shift();
           }
         }
       } else if (event.type === "match") {
@@ -158,11 +159,12 @@ function parseGrepOutput(cleanOutput: string, basePath?: string, requestedContex
           lastMatch.contextAfterCount++;
         } else {
           lastMatch = null;
-          if (requestedContext > 0) {
-            pendingContextBefore.push({ line: lineNum, text });
-            if (pendingContextBefore.length > requestedContext) {
-              pendingContextBefore.shift();
-            }
+        }
+
+        if (requestedContext > 0) {
+          pendingContextBefore.push({ line: lineNum, text });
+          if (pendingContextBefore.length > requestedContext) {
+            pendingContextBefore.shift();
           }
         }
       }

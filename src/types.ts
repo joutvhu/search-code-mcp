@@ -153,6 +153,10 @@ export const ReplaceSchema = z.object({
     .optional()
     .default(50)
     .describe("Safety guardrail: maximum number of individual match occurrences to replace per call (default: 50)."),
+  caseSensitive: z
+    .boolean()
+    .optional()
+    .describe("[regex/text only] Force case-sensitive (true) or case-insensitive (false). Default: true."),
   filePattern: z
     .string()
     .optional()

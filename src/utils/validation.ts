@@ -4,6 +4,8 @@ import path from "node:path";
 const EXTENSION_MAP: Record<string, string> = {
   ".ts": "typescript",
   ".tsx": "tsx",
+  ".mts": "typescript",
+  ".cts": "typescript",
   ".js": "javascript",
   ".jsx": "jsx",
   ".mjs": "javascript",

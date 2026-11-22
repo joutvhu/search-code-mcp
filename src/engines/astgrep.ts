@@ -8,7 +8,11 @@ import { resolveTarget, formatOutputPath, splitGlobList } from "../utils/paths.j
 
 export const FILE_TYPE_GLOBS: Record<string, string> = {
   ts: "*.{ts,tsx,mts,cts}",
+  typescript: "*.{ts,tsx,mts,cts}",
+  tsx: "*.tsx",
   js: "*.{js,jsx,mjs,cjs}",
+  javascript: "*.{js,jsx,mjs,cjs}",
+  jsx: "*.jsx",
   py: "*.{py,pyi}",
   python: "*.{py,pyi}",
   rust: "*.rs",
@@ -31,7 +35,9 @@ export const FILE_TYPE_GLOBS: Record<string, string> = {
   css: "*.css",
   json: "*.json",
   yaml: "*.{yaml,yml}",
+  yml: "*.{yaml,yml}",
   sh: "*.{sh,bash}",
+  bash: "*.{sh,bash}",
 };
 
 function getBaseArgs(): string[] {
@@ -295,7 +301,7 @@ export async function runAstGrepDump(params: DumpTreeParams): Promise<string> {
     params.code,
     "--lang",
     params.language,
-    `--debug-query=${params.format || "cst"}`,
+    `--debug-query=${params.format || "ast"}`,
   ];
 
   try {

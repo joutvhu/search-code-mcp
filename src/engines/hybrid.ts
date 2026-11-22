@@ -5,6 +5,28 @@ import { SearchParams } from "../types.js";
 
 const AST_BATCH_SIZE = 50;
 
+const COMMON_STOP_WORDS = new Set([
+  "function",
+  "return",
+  "import",
+  "export",
+  "const",
+  "let",
+  "var",
+  "class",
+  "interface",
+  "type",
+  "default",
+  "public",
+  "private",
+  "protected",
+  "async",
+  "await",
+  "from",
+  "void",
+  "static",
+]);
+
 /**
  * Extract words/identifiers from an AST pattern to use as coarse filter for ripgrep
  */
@@ -30,7 +52,9 @@ export async function runHybridSearch(params: SearchParams): Promise<MatchItem[]
     return runAstGrepPattern(params);
   }
 
-  const primaryKeyword = keywords.sort((a, b) => b.length - a.length)[0];
+  const nonStopWords = keywords.filter((w) => !COMMON_STOP_WORDS.has(w.toLowerCase()));
+  const candidatePool = nonStopWords.length > 0 ? nonStopWords : keywords;
+  const primaryKeyword = candidatePool.sort((a, b) => b.length - a.length)[0];
 
   let filePattern = params.filePattern;
   if (!filePattern && params.language) {

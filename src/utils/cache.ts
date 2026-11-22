@@ -103,16 +103,18 @@ export function saveSearchCache(
     console.warn("Failed to write global search cache:", err);
   }
 
-  // 2. Secondary write to project cache if workspace allows
-  try {
-    const projectCacheDir = getProjectCacheDir(projectPath);
-    ensureCacheDirWithGitignore(projectCacheDir);
-    const cacheFile = path.join(projectCacheDir, `${searchId}.json`);
-    fs.writeFileSync(cacheFile, payload, "utf8");
-    cleanExpiredCache(projectCacheDir, DEFAULT_TTL_MS);
-    saved = true;
-  } catch {
-    // Ignore secondary write failures
+  // 2. Optional write to project cache only if explicitly enabled via env
+  if (process.env.ENABLE_PROJECT_CACHE === "true" || process.env.ENABLE_PROJECT_CACHE === "1") {
+    try {
+      const projectCacheDir = getProjectCacheDir(projectPath);
+      ensureCacheDirWithGitignore(projectCacheDir);
+      const cacheFile = path.join(projectCacheDir, `${searchId}.json`);
+      fs.writeFileSync(cacheFile, payload, "utf8");
+      cleanExpiredCache(projectCacheDir, DEFAULT_TTL_MS);
+      saved = true;
+    } catch {
+      // Ignore secondary write failures
+    }
   }
 
   return saved;

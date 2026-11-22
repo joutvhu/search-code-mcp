@@ -372,7 +372,7 @@ export function safeSpawn(
       if (exitCode === 0) {
         finishSuccess({ stdout, stderr, exitCode });
       } else if (exitCode === 1) {
-        if (stderr && (stderr.includes("error:") || stderr.includes("Error:") || stderr.includes("not recognized"))) {
+        if (stderr && (/error:|fatal:|exception:|not recognized/i.test(stderr))) {
           const error = new Error(`Command '${executable}' failed:\n${stderr}`);
           Object.assign(error, { exitCode, stdout, stderr });
           finishError(error);
