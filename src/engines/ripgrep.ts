@@ -205,7 +205,7 @@ async function runRgSearch(binary: string, params: Partial<SearchParams>): Promi
 
   if (params.noIgnore) args.push("--no-ignore");
   if (params.includeHidden) {
-    args.push("-.");
+    args.push("--hidden");
     if (!params.noIgnore) {
       args.push("-g", "!.git/**", "-g", "!.git");
     }
@@ -247,7 +247,7 @@ async function runUgrepSearch(binary: string, params: Partial<SearchParams>): Pr
 
   if (params.noIgnore) args.push("--no-ignore");
   if (params.includeHidden) {
-    args.push("-.");
+    args.push("--hidden");
     if (!params.noIgnore) {
       args.push("-g", "!.git/**", "-g", "!.git");
     }
@@ -351,7 +351,7 @@ export async function runRipgrepFilesWithMatches(
     }
     if (params.noIgnore) args.push("--no-ignore");
     if (params.includeHidden) {
-      args.push("-.");
+      args.push("--hidden");
       if (!params.noIgnore) {
         args.push("-g", "!.git/**", "-g", "!.git");
       }
@@ -452,7 +452,7 @@ export async function runRipgrepCount(params: Partial<CountParams>): Promise<{ t
   }
   if (params.noIgnore) args.push("--no-ignore");
   if (params.includeHidden) {
-    args.push("-.");
+    args.push("--hidden");
     if (!params.noIgnore) {
       args.push("-g", "!.git/**", "-g", "!.git");
     }
@@ -551,7 +551,7 @@ export async function runRipgrepListFiles(params: Partial<ListFilesParams>): Pro
       }
       if (params.noIgnore) args.push("--no-ignore");
       if (params.includeHidden) {
-        args.push("-.");
+        args.push("--hidden");
         if (!params.noIgnore) {
           args.push("-g", "!.git/**", "-g", "!.git");
         }

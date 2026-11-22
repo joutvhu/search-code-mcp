@@ -18,20 +18,21 @@ export async function handleReplace(params: ReplaceParams) {
   const maxLimit = params.maxReplacements ?? 50;
 
   if (params.type === "regex" || params.type === "text") {
-    // Validate regex upfront so invalid JS RegExp fails loudly instead of silently
-    let regex: RegExp;
-    const flags = params.caseSensitive === false ? (params.type === "text" ? "gi" : "gim") : (params.type === "text" ? "g" : "gm");
-    if (params.type === "text") {
-      regex = new RegExp(params.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), flags);
-    } else {
-      regex = new RegExp(params.query, flags);
-    }
-
     const isMultiline =
       params.type === "regex" &&
       (params.multiline === true ||
         params.query.includes("\n") ||
         /\\n|\\[sSwWdD]/.test(params.query));
+
+    // Validate regex upfront so invalid JS RegExp fails loudly instead of silently
+    let regex: RegExp;
+    const baseFlags = params.type === "text" ? "g" : (isMultiline ? "gms" : "gm");
+    const flags = params.caseSensitive === false ? `${baseFlags}i` : baseFlags;
+    if (params.type === "text") {
+      regex = new RegExp(params.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), flags);
+    } else {
+      regex = new RegExp(params.query, flags);
+    }
 
     const candidateFiles = await runRipgrepFilesWithMatches({
       path: params.path,

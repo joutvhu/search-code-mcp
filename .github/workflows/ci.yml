@@ -27,8 +27,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install search engines for tests
+      - name: Install ast-grep
         run: npm install -g @ast-grep/cli
+
+      - name: Install native search engines (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep universal-ctags
+
+      - name: Install native search engines (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install ripgrep universal-ctags -y
 
       - name: Run tests
         run: npm test

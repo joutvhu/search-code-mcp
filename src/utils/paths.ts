@@ -118,7 +118,12 @@ export function toRelativePath(filePath: string, basePath?: string): string {
   const rel = path.relative(base, absFile);
 
   if (!rel) {
-    return path.basename(absFile);
+    try {
+      if (fs.existsSync(absFile) && fs.statSync(absFile).isFile()) {
+        return path.basename(absFile);
+      }
+    } catch {}
+    return ".";
   }
 
   // If outside base or on different drive on Windows

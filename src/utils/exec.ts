@@ -387,6 +387,7 @@ export function safeSpawn(
     });
 
     if (inputText !== undefined && child.stdin) {
+      child.stdin.on("error", () => {});
       child.stdin.write(inputText);
       child.stdin.end();
     }
