@@ -30,6 +30,25 @@ export interface CacheFormatInfo {
 }
 
 /**
+ * Deduplicate matches by file path for 'files_only' output and pagination
+ */
+export function deduplicateMatchesByFile(matches: MatchItem[]): MatchItem[] {
+  const seen = new Set<string>();
+  const uniqueFileMatches: MatchItem[] = [];
+  for (const m of matches) {
+    if (!seen.has(m.file)) {
+      seen.add(m.file);
+      uniqueFileMatches.push({
+        file: m.file,
+        startLine: m.startLine,
+        content: m.file,
+      });
+    }
+  }
+  return uniqueFileMatches;
+}
+
+/**
  * Format match items according to requested outputFormat
  */
 export function formatMatchItems(

@@ -58,6 +58,16 @@ function checkToolVersion(tool: string): string | null {
   }
 }
 
+function hasWindowsCommand(cmd: string): boolean {
+  if (process.platform !== "win32") return false;
+  try {
+    const res = spawnSync("where.exe", [cmd], { stdio: "ignore" });
+    return res.status === 0;
+  } catch {
+    return false;
+  }
+}
+
 function getInstallCommand(tool: "ast-grep" | "ripgrep" | "universal-ctags"): {
   cmd: string;
   args: string[];
@@ -76,6 +86,12 @@ function getInstallCommand(tool: "ast-grep" | "ripgrep" | "universal-ctags"): {
 
   if (tool === "ripgrep") {
     if (isWin) {
+      if (!hasWindowsCommand("winget") && hasWindowsCommand("scoop")) {
+        return { cmd: "scoop", args: ["install", "ripgrep"], desc: "scoop install ripgrep" };
+      }
+      if (!hasWindowsCommand("winget") && hasWindowsCommand("choco")) {
+        return { cmd: "choco", args: ["install", "ripgrep", "-y"], desc: "choco install ripgrep -y" };
+      }
       return {
         cmd: "winget",
         args: ["install", "BurntSushi.ripgrep.MSVC"],
@@ -90,6 +106,20 @@ function getInstallCommand(tool: "ast-grep" | "ripgrep" | "universal-ctags"): {
 
   // universal-ctags
   if (isWin) {
+    if (hasWindowsCommand("winget")) {
+      return {
+        cmd: "winget",
+        args: ["install", "UniversalCtags.Ctags"],
+        desc: "winget install UniversalCtags.Ctags",
+      };
+    }
+    if (hasWindowsCommand("scoop")) {
+      return {
+        cmd: "scoop",
+        args: ["install", "universal-ctags"],
+        desc: "scoop install universal-ctags",
+      };
+    }
     return { cmd: "choco", args: ["install", "universal-ctags", "-y"], desc: "choco install universal-ctags -y" };
   }
   if (isMac) {

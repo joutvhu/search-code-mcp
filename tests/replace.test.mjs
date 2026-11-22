@@ -263,4 +263,70 @@ describe("Replace Handler Tests", () => {
     assert.ok(!res.isError);
     assert.equal(fs.readFileSync(file, "utf8"), "Hello there\n");
   });
+
+  it("should support multiline regex replacement with [\\w\\W] and explicit multiline option", async () => {
+    const dir = makeTempDir();
+    const file = path.join(dir, "block.ts");
+    fs.writeFileSync(file, "/*start*/\nhello\n/*end*/\n", "utf8");
+
+    const res = await handleReplace({
+      query: "/\\*start\\*/[\\w\\W]*?/\\*end\\*/",
+      replacement: "/*replaced*/",
+      type: "regex",
+      path: dir,
+      multiline: true,
+      dryRun: false,
+    });
+
+    assert.ok(!res.isError);
+    assert.equal(fs.readFileSync(file, "utf8"), "/*replaced*/\n");
+  });
+
+  it("should support includeHidden in replace across text and ast modes while excluding .git", async () => {
+    const dir = makeTempDir();
+    const hiddenDir = path.join(dir, ".hidden");
+    const gitDir = path.join(dir, ".git");
+    fs.mkdirSync(hiddenDir, { recursive: true });
+    fs.mkdirSync(gitDir, { recursive: true });
+
+    const hiddenFile = path.join(hiddenDir, "config.ts");
+    const gitFile = path.join(gitDir, "info.ts");
+    fs.writeFileSync(hiddenFile, "const flag = OLD_VAL;\n", "utf8");
+    fs.writeFileSync(gitFile, "const flag = OLD_VAL;\n", "utf8");
+
+    const defaultRes = await handleReplace({
+      query: "OLD_VAL",
+      replacement: "NEW_VAL",
+      type: "text",
+      path: dir,
+      dryRun: false,
+    });
+    assert.ok(defaultRes.content[0].text.includes("No matches found"));
+    assert.equal(fs.readFileSync(hiddenFile, "utf8"), "const flag = OLD_VAL;\n");
+
+    const hiddenAstRes = await handleReplace({
+      query: "const flag = OLD_VAL;",
+      replacement: "const flag = NEW_VAL;",
+      type: "ast",
+      path: dir,
+      language: "typescript",
+      includeHidden: true,
+      dryRun: false,
+    });
+    assert.ok(!hiddenAstRes.isError);
+    assert.equal(fs.readFileSync(hiddenFile, "utf8"), "const flag = NEW_VAL;\n");
+    assert.equal(fs.readFileSync(gitFile, "utf8"), "const flag = OLD_VAL;\n");
+
+    const hiddenTextRes = await handleReplace({
+      query: "NEW_VAL",
+      replacement: "FINAL_VAL",
+      type: "text",
+      path: dir,
+      includeHidden: true,
+      dryRun: false,
+    });
+    assert.ok(!hiddenTextRes.isError);
+    assert.equal(fs.readFileSync(hiddenFile, "utf8"), "const flag = FINAL_VAL;\n");
+    assert.equal(fs.readFileSync(gitFile, "utf8"), "const flag = OLD_VAL;\n");
+  });
 });

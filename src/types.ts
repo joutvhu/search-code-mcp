@@ -99,7 +99,7 @@ export const SearchSchema = z.object({
   includeHidden: z
     .boolean()
     .optional()
-    .describe("[regex/text only] Include hidden dotfiles and dot-directories."),
+    .describe("Include hidden dotfiles and dot-directories (excludes .git unless noIgnore is true)."),
 
   // ast-grep & output options
   language: z
@@ -157,6 +157,10 @@ export const ReplaceSchema = z.object({
     .boolean()
     .optional()
     .describe("[regex/text only] Force case-sensitive (true) or case-insensitive (false). Default: true."),
+  multiline: z
+    .boolean()
+    .optional()
+    .describe("[regex only] Allow pattern to match across multiple lines. Automatically enabled when query contains \\n or multiline character classes."),
   filePattern: z
     .string()
     .optional()
@@ -165,6 +169,16 @@ export const ReplaceSchema = z.object({
     .string()
     .optional()
     .describe("Comma-separated glob patterns to exclude, e.g. '**/dist/**,**/*.test.ts'."),
+  noIgnore: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If true, also replace in files ignored by .gitignore. Default: false (respects .gitignore)."),
+  includeHidden: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If true, include hidden dotfiles and dot-directories (excludes .git unless noIgnore is true). Default: false."),
   language: z
     .string()
     .optional()
@@ -202,6 +216,11 @@ export const CountSchema = z.object({
     .optional()
     .default(false)
     .describe("If true, include gitignored files. Default: false."),
+  includeHidden: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If true, include hidden dotfiles and dot-directories (excludes .git unless noIgnore is true). Default: false."),
   perFile: z
     .boolean()
     .optional()

@@ -47,10 +47,18 @@ function getBaseArgs(): string[] {
 
 function appendAstFilterArgs(
   args: string[],
-  params: { filePattern?: string; excludePattern?: string; noIgnore?: boolean }
+  params: {
+    filePattern?: string;
+    excludePattern?: string;
+    noIgnore?: boolean;
+    includeHidden?: boolean;
+  }
 ): void {
   if (params.noIgnore) {
     args.push("--no-ignore", "vcs", "--no-ignore", "dot");
+  }
+  if (params.includeHidden) {
+    args.push("--no-ignore", "hidden");
   }
 
   if (params.filePattern) {
@@ -65,6 +73,10 @@ function appendAstFilterArgs(
         args.push("--globs", pat.startsWith("!") ? pat : `!${pat}`);
       }
     }
+  }
+
+  if (params.includeHidden && !params.noIgnore) {
+    args.push("--globs", "!.git/**", "--globs", "!.git");
   }
 }
 

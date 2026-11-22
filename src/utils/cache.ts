@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
+import { OutputFormat } from "../types.js";
+import { deduplicateMatchesByFile } from "./formatters.js";
 import { resolveTarget, findProjectRoot, getWorkspaceRoot } from "./paths.js";
 
 export interface CachedSearchData {
@@ -127,7 +129,8 @@ export function readSearchCache(
   projectPath: string,
   searchId: string,
   offset: number = 1,
-  limit: number = 50
+  limit: number = 50,
+  outputFormat?: OutputFormat
 ): { chunk: any[]; totalMatches: number; hasMore: boolean; nextOffset: number } | null {
   if (!isValidSearchId(searchId)) {
     return null;
@@ -148,17 +151,20 @@ export function readSearchCache(
         return null;
       }
 
+      const effectiveMatches =
+        outputFormat === "files_only" ? deduplicateMatchesByFile(data.matches) : data.matches;
+      const totalMatches = effectiveMatches.length;
       const safeOffset = Math.max(1, Math.floor(offset));
       const safeLimit = Math.max(1, Math.floor(limit));
       const startIndex = safeOffset - 1;
       const endIndex = startIndex + safeLimit;
-      const chunk = data.matches.slice(startIndex, endIndex);
-      const hasMore = endIndex < data.totalMatches;
+      const chunk = effectiveMatches.slice(startIndex, endIndex);
+      const hasMore = endIndex < totalMatches;
       const nextOffset = endIndex + 1;
 
       return {
         chunk,
-        totalMatches: data.totalMatches,
+        totalMatches,
         hasMore,
         nextOffset,
       };

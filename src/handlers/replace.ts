@@ -27,6 +27,12 @@ export async function handleReplace(params: ReplaceParams) {
       regex = new RegExp(params.query, flags);
     }
 
+    const isMultiline =
+      params.type === "regex" &&
+      (params.multiline === true ||
+        params.query.includes("\n") ||
+        /\\n|\\[sSwWdD]/.test(params.query));
+
     const candidateFiles = await runRipgrepFilesWithMatches({
       path: params.path,
       query: params.query,
@@ -34,7 +40,9 @@ export async function handleReplace(params: ReplaceParams) {
       filePattern: params.filePattern,
       excludePattern: params.excludePattern,
       caseSensitive: params.caseSensitive ?? true,
-      multiline: params.type === "regex" && (params.query.includes("\n") || /\\n|\\[sS]/.test(params.query)),
+      multiline: isMultiline,
+      noIgnore: params.noIgnore,
+      includeHidden: params.includeHidden,
     });
 
     if (candidateFiles.length === 0) {

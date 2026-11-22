@@ -229,5 +229,57 @@ describe("Auxiliary Tools Tests", () => {
     assert.ok(methodSym);
     assert.equal(methodSym.kind, "method");
     assert.equal(methodSym.name, "process");
+
+    const genericMethodSym = extractSymbolFromLine("public Map<String, List<User>> getUsers(int id) throws IOException {");
+    assert.ok(genericMethodSym);
+    assert.equal(genericMethodSym.kind, "method");
+    assert.equal(genericMethodSym.name, "getUsers");
+
+    const fqcnMethodSym = extractSymbolFromLine("public java.lang.String getName() {");
+    assert.ok(fqcnMethodSym);
+    assert.equal(fqcnMethodSym.kind, "method");
+    assert.equal(fqcnMethodSym.name, "getName");
+
+    assert.equal(extractSymbolFromLine("return new Foo() {"), null);
+    assert.equal(extractSymbolFromLine("throw new Error() {"), null);
+  });
+
+  it("should support includeHidden in count for both text and ast modes", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "search-code-count-hidden-"));
+
+    try {
+      const hiddenDir = path.join(dir, ".hidden");
+      fs.mkdirSync(hiddenDir, { recursive: true });
+      fs.writeFileSync(path.join(hiddenDir, "secret.ts"), "const hiddenToken = 123;\n", "utf8");
+
+      const hiddenOff = await handleCount({
+        query: "hiddenToken",
+        type: "text",
+        path: dir,
+      });
+      assert.ok(hiddenOff.content[0].text.includes("0 match(es)"));
+
+      const hiddenTextOn = await handleCount({
+        query: "hiddenToken",
+        type: "text",
+        path: dir,
+        includeHidden: true,
+      });
+      assert.ok(hiddenTextOn.content[0].text.includes("1 match(es)"));
+
+      const hiddenAstOn = await handleCount({
+        query: "const hiddenToken = $V",
+        type: "ast",
+        path: dir,
+        language: "typescript",
+        includeHidden: true,
+      });
+      assert.ok(hiddenAstOn.content[0].text.includes("1 AST match(es)"));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

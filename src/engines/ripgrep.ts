@@ -451,6 +451,12 @@ export async function runRipgrepCount(params: Partial<CountParams>): Promise<{ t
     }
   }
   if (params.noIgnore) args.push("--no-ignore");
+  if (params.includeHidden) {
+    args.push("-.");
+    if (!params.noIgnore) {
+      args.push("-g", "!.git/**", "-g", "!.git");
+    }
+  }
 
   args.push("-e", params.query || "", "--", targetPath);
 

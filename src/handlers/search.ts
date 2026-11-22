@@ -2,7 +2,7 @@ import { SearchParams } from "../types.js";
 import { runRipgrepSearch } from "../engines/ripgrep.js";
 import { runAstGrepPattern, runAstGrepRule } from "../engines/astgrep.js";
 import { runHybridSearch } from "../engines/hybrid.js";
-import { formatMatchItems, MatchItem } from "../utils/formatters.js";
+import { deduplicateMatchesByFile, formatMatchItems, MatchItem } from "../utils/formatters.js";
 import { validateYamlRule } from "../utils/validation.js";
 import {
   generateSearchId,
@@ -19,7 +19,7 @@ export async function handleSearch(params: SearchParams) {
 
   // 1. Pagination from Cache
   if (params.searchId) {
-    const cached = readSearchCache(projectPath, params.searchId, offset, limit);
+    const cached = readSearchCache(projectPath, params.searchId, offset, limit, params.outputFormat);
 
     if (!cached) {
       return {
@@ -90,33 +90,22 @@ export async function handleSearch(params: SearchParams) {
       matches = await runRipgrepSearch(params);
   }
 
-  // Deduplicate by file when files_only format is requested so pagination pages through files
-  if (params.outputFormat === "files_only") {
-    const seen = new Set<string>();
-    const uniqueFileMatches: MatchItem[] = [];
-    for (const m of matches) {
-      if (!seen.has(m.file)) {
-        seen.add(m.file);
-        uniqueFileMatches.push({
-          file: m.file,
-          startLine: m.startLine,
-          content: m.file,
-        });
-      }
-    }
-    matches = uniqueFileMatches;
-  }
+  // Deduplicate by file when files_only format is requested so pagination pages through files,
+  // while keeping rawMatches intact for cache so format switching on searchId remains accurate.
+  const rawMatches = matches;
+  const effectiveMatches =
+    params.outputFormat === "files_only" ? deduplicateMatchesByFile(rawMatches) : rawMatches;
 
-  const totalMatches = matches.length;
+  const totalMatches = effectiveMatches.length;
   const startIndex = offset - 1;
   const endIndex = startIndex + limit;
-  const chunk = matches.slice(startIndex, endIndex);
+  const chunk = effectiveMatches.slice(startIndex, endIndex);
   const hasMore = endIndex < totalMatches;
 
   // On-demand caching if results exceed current window or pagination is needed
   if (totalMatches > limit || offset > 1) {
     const searchId = generateSearchId();
-    const saved = saveSearchCache(projectPath, searchId, matches, {
+    const saved = saveSearchCache(projectPath, searchId, rawMatches, {
       query: params.query,
       type: params.type || "regex",
     });

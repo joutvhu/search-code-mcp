@@ -105,8 +105,13 @@ export function extractSymbolFromLine(line: string, includeLocals: boolean = fal
   }
 
   // 5. Method definitions in OOP languages (Java, C#, C++, TS/JS class methods)
+  const firstWord = trimmed.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)/)?.[1];
+  if (firstWord && CONTROL_FLOW_KEYWORDS.has(firstWord)) {
+    return null;
+  }
+
   m = trimmed.match(
-    /^(?:(?:public|private|protected|static|override|readonly|virtual|final|async)\s+)*(?:[a-zA-Z0-9_<>\[\]]+\s+)?([a-zA-Z0-9_]+)\s*\([^)]*\)\s*(?::\s*[^{]+|\bthrows\s+[^{]+)?\{/
+    /^(?:(?:public|private|protected|static|override|readonly|virtual|final|async)\s+)*(?:[a-zA-Z0-9_$.\[\]?]+(?:<(?:[^<>]|<[^<>]*>)*>)?(?:\[\]|\?)*\s+)?([a-zA-Z0-9_]+)\s*\([^)]*\)\s*(?::\s*[^{]+|\bthrows\s+[^{]+)?\{/
   );
   if (m && !CONTROL_FLOW_KEYWORDS.has(m[1])) {
     return { kind: "method", name: m[1] };
@@ -275,8 +280,9 @@ async function runRipgrepSymbols(params: Partial<FindSymbolsParams>): Promise<Sy
     const escaped = escapeRegExp(rawTargetName);
     query = params.exactMatch ? `\\b${escaped}\\b` : escaped;
   } else {
-    // Outline mode: include methods and declarations
-    query = "\\b(function|class|interface|type|enum|struct|trait|def|fn|func|const|let|var)\\b|(?:public|private|protected|async)\\s+[a-zA-Z0-9_]+\\s*\\(";
+    // Outline mode: include declarations, OOP modifiers, and method definitions
+    query =
+      "\\b(function|class|interface|type|enum|struct|trait|def|fn|func|const|let|var|public|private|protected|static|override|async)\\b|^\\s*[a-zA-Z0-9_]+\\s*\\(";
   }
 
   const rgMatches = await runRipgrepSearch({

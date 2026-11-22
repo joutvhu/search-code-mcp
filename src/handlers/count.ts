@@ -11,6 +11,7 @@ export async function handleCount(params: CountParams) {
       filePattern: params.filePattern,
       excludePattern: params.excludePattern,
       noIgnore: params.noIgnore,
+      includeHidden: params.includeHidden,
     });
 
     if (params.perFile) {

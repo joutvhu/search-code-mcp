@@ -230,4 +230,37 @@ rule:
     assert.ok(!res.isError);
     assert.ok(res.content[0].text.includes("paths.ts"));
   });
+
+  it("should support switching outputFormat between content and files_only on cached searchId", async () => {
+    const first = await handleSearch({
+      query: "export",
+      type: "text",
+      path: "./src",
+      outputFormat: "files_only",
+      limit: 2,
+    });
+
+    assert.ok(!first.isError);
+    const match = first.content[0].text.match(/searchId:\s*"([^"]+)"/);
+    assert.ok(match?.[1], "Should produce searchId");
+    const searchId = match[1];
+
+    const contentPage = await handleSearch({
+      searchId,
+      offset: 1,
+      limit: 2,
+      outputFormat: "content",
+    });
+    assert.ok(!contentPage.isError);
+    assert.ok(contentPage.content[0].text.includes("export"), "Content format on cached files_only search should still show match lines");
+
+    const filesPage = await handleSearch({
+      searchId,
+      offset: 3,
+      limit: 2,
+      outputFormat: "files_only",
+    });
+    assert.ok(!filesPage.isError);
+    assert.ok(filesPage.content[0].text.includes("Showing files 3-4 of") || filesPage.content[0].text.includes("src"));
+  });
 });
