@@ -78,6 +78,29 @@ describe("Auxiliary Tools Tests", () => {
     assert.equal(emptyRes.content[0].text, "No files found matching criteria.");
   });
 
+  it("should list files with includeHidden and exclude .git directory", async () => {
+    const res = await handleListFiles({
+      path: ".",
+      includeHidden: true,
+    });
+
+    assert.ok(!res.isError);
+    assert.ok(res.content[0].text.includes(".gitignore"), "Should include .gitignore");
+    assert.ok(!res.content[0].text.includes(".git/objects") && !res.content[0].text.includes(".git\\objects"), "Should exclude .git objects");
+  });
+
+  it("should filter out local variables by default in find_symbols outline", async () => {
+    const res = await handleFindSymbols({
+      path: "./src/handlers/search.ts",
+      name: "",
+    });
+
+    assert.ok(!res.isError);
+    assert.ok(res.content[0].text.includes("handleSearch"));
+    // Local variables like "cached", "seen", "val", "m" inside handleSearch should be excluded by default
+    assert.ok(!res.content[0].text.includes("[variable] cached") && !res.content[0].text.includes("[variable] seen"));
+  });
+
   it("should find symbols and respect kinds filter", async () => {
     const res = await handleFindSymbols({
       name: "handleSearch",
@@ -116,7 +139,7 @@ describe("Auxiliary Tools Tests", () => {
 
     assert.ok(!res.isError);
     assert.ok(res.content[0].text.includes("SearchParams"));
-    assert.ok(res.content[0].text.includes("`type`"), "SearchParams should be classified as type, not other");
+    assert.ok(res.content[0].text.includes("[type]"), "SearchParams should be classified as type, not other");
 
     const noMatchRes = await handleFindSymbols({
       name: "SearchParams",

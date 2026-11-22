@@ -3,7 +3,7 @@ import path from "node:path";
 import { ReplaceParams } from "../types.js";
 import { runAstGrepRewrite } from "../engines/astgrep.js";
 import { buildUnifiedDiff } from "../utils/formatters.js";
-import { runRipgrepSearch } from "../engines/ripgrep.js";
+import { runRipgrepFilesWithMatches } from "../engines/ripgrep.js";
 import { resolveTarget, formatOutputPath } from "../utils/paths.js";
 
 export async function handleReplace(params: ReplaceParams) {
@@ -19,24 +19,23 @@ export async function handleReplace(params: ReplaceParams) {
       regex = new RegExp(params.query, "gm");
     }
 
-    const matches = await runRipgrepSearch({
+    const candidateFiles = await runRipgrepFilesWithMatches({
       path: params.path,
       query: params.query,
       type: params.type,
       filePattern: params.filePattern,
-      fileType: params.fileType,
       excludePattern: params.excludePattern,
-      noIgnore: params.noIgnore,
       caseSensitive: true,
+      multiline: params.type === "regex" && (params.query.includes("\n") || /\\n|\\[sS]/.test(params.query)),
     });
 
-    if (matches.length === 0) {
+    if (candidateFiles.length === 0) {
       return {
         content: [{ type: "text", text: "No matches found to replace." }],
       };
     }
 
-    const uniqueFiles = Array.from(new Set(matches.map((m) => m.file)));
+    const uniqueFiles = Array.from(new Set(candidateFiles));
     const diffs: string[] = [];
     let totalReplaced = 0;
     let truncatedByLimit = false;
@@ -72,9 +71,18 @@ export async function handleReplace(params: ReplaceParams) {
             if (token === "$`") return srcStr.slice(0, matchOffset);
             if (token === "$'") return srcStr.slice(matchOffset + fullMatch.length);
             if (groupName) return maybeGroups?.[groupName] ?? "";
-            const idx = parseInt(token.slice(1), 10);
+
+            const numStr = token.slice(1);
+            const idx = parseInt(numStr, 10);
             if (idx >= 1 && idx <= captureArgs.length) {
               return captureArgs[idx - 1] ?? "";
+            }
+            // If 2 digits, fallback to $1 + "0" if single digit exists
+            if (numStr.length === 2) {
+              const firstDigit = parseInt(numStr[0], 10);
+              if (firstDigit >= 1 && firstDigit <= captureArgs.length) {
+                return (captureArgs[firstDigit - 1] ?? "") + numStr[1];
+              }
             }
             return token;
           });

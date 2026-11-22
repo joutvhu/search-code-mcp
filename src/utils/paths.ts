@@ -179,9 +179,9 @@ export function splitGlobList(pattern?: string): string[] {
 }
 
 /**
- * Convert simple glob pattern (supporting **, *, ?, {a,b}) to RegExp
+ * Convert simple glob pattern fragment (supporting **, *, ?, [a-z], {a,b}) to RegExp fragment
  */
-export function globToRegExp(glob: string): RegExp {
+function globFragmentToRegex(glob: string): string {
   const normalized = glob.replace(/\\/g, "/").trim();
   let regexStr = "";
   let i = 0;
@@ -201,11 +201,20 @@ export function globToRegExp(glob: string): RegExp {
       regexStr += "[^/]*";
     } else if (ch === "?") {
       regexStr += "[^/]";
+    } else if (ch === "[") {
+      const closeIdx = normalized.indexOf("]", i);
+      if (closeIdx !== -1) {
+        const inner = normalized.slice(i, closeIdx + 1);
+        regexStr += inner;
+        i = closeIdx + 1;
+        continue;
+      }
+      regexStr += "\\[";
     } else if (ch === "{") {
       const closeIdx = normalized.indexOf("}", i);
       if (closeIdx !== -1) {
         const inner = normalized.slice(i + 1, closeIdx);
-        const parts = inner.split(",").map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+        const parts = inner.split(",").map((p) => globFragmentToRegex(p.trim()));
         regexStr += `(?:${parts.join("|")})`;
         i = closeIdx + 1;
         continue;
@@ -216,7 +225,15 @@ export function globToRegExp(glob: string): RegExp {
     }
     i++;
   }
+  return regexStr;
+}
 
+/**
+ * Convert simple glob pattern (supporting **, *, ?, {a,b}, [a-z]) to RegExp
+ */
+export function globToRegExp(glob: string): RegExp {
+  const normalized = glob.replace(/\\/g, "/").trim();
+  const regexStr = globFragmentToRegex(normalized);
   const hasSlash = normalized.includes("/");
   return hasSlash ? new RegExp(`^${regexStr}$`) : new RegExp(`(?:^|/)${regexStr}$`);
 }

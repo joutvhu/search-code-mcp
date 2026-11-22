@@ -10,18 +10,23 @@ import {
   globToRegExp,
   splitGlobList,
 } from "../utils/paths.js";
-import { FILE_TYPE_GLOBS } from "./astgrep.js";
+
+interface ActiveMatch {
+  item: MatchItem;
+  lastLine: number;
+  contextAfterCount: number;
+}
 
 /**
  * Parse ripgrep --json output unambiguously.
  * When context lines are present, they are attached to their corresponding match
  * instead of being counted as independent matches.
  */
-function parseRgJsonOutput(stdout: string, basePath?: string): MatchItem[] {
+function parseRgJsonOutput(stdout: string, basePath?: string, requestedContext: number = 0): MatchItem[] {
   if (!stdout) return [];
   const matches: MatchItem[] = [];
   let pendingContextBefore: Array<{ line: number; text: string }> = [];
-  let lastMatch: { item: MatchItem; contextAfterCount: number } | null = null;
+  let lastMatch: ActiveMatch | null = null;
 
   for (const rawLine of stdout.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -48,23 +53,34 @@ function parseRgJsonOutput(stdout: string, basePath?: string): MatchItem[] {
           : "";
 
       if (event.type === "context") {
-        if (lastMatch && lastMatch.contextAfterCount < 20) {
+        if (
+          lastMatch &&
+          requestedContext > 0 &&
+          lineNumber === lastMatch.lastLine + 1 &&
+          lastMatch.contextAfterCount < requestedContext
+        ) {
           lastMatch.item.content += `\n  ${lineNumber}- ${rawText}`;
+          lastMatch.lastLine = lineNumber;
           lastMatch.contextAfterCount++;
         } else {
-          pendingContextBefore.push({ line: lineNumber, text: rawText });
-          if (pendingContextBefore.length > 20) {
-            pendingContextBefore.shift();
+          lastMatch = null;
+          if (requestedContext > 0) {
+            pendingContextBefore.push({ line: lineNumber, text: rawText });
+            if (pendingContextBefore.length > requestedContext) {
+              pendingContextBefore.shift();
+            }
           }
         }
       } else if (event.type === "match") {
         const lineCount = rawText.includes("\n") ? rawText.split("\n").length : 1;
+        const endLine = lineCount > 1 ? lineNumber + lineCount - 1 : lineNumber;
         let content = "";
-        if (pendingContextBefore.length > 0) {
+        if (requestedContext > 0 && pendingContextBefore.length > 0) {
           content = pendingContextBefore.map((c) => `  ${c.line}- ${c.text}`).join("\n") + "\n";
-          pendingContextBefore = [];
         }
-        if (content.length > 0) {
+        pendingContextBefore = [];
+
+        if (requestedContext > 0) {
           content += `> ${lineNumber}: ${rawText}`;
         } else {
           content = rawText;
@@ -73,11 +89,11 @@ function parseRgJsonOutput(stdout: string, basePath?: string): MatchItem[] {
         const matchItem: MatchItem = {
           file: formatOutputPath(fileText, basePath),
           startLine: lineNumber,
-          ...(lineCount > 1 ? { endLine: lineNumber + lineCount - 1 } : {}),
+          ...(lineCount > 1 ? { endLine } : {}),
           content,
         };
         matches.push(matchItem);
-        lastMatch = { item: matchItem, contextAfterCount: 0 };
+        lastMatch = { item: matchItem, lastLine: endLine, contextAfterCount: 0 };
       }
     } catch {
       // Skip malformed JSON line
@@ -91,13 +107,13 @@ function parseRgJsonOutput(stdout: string, basePath?: string): MatchItem[] {
  * Standard output parser for ugrep and git grep.
  * Attaches context lines to matches cleanly.
  */
-function parseGrepOutput(cleanOutput: string, basePath?: string): MatchItem[] {
+function parseGrepOutput(cleanOutput: string, basePath?: string, requestedContext: number = 0): MatchItem[] {
   if (!cleanOutput) return [];
   const matches: MatchItem[] = [];
   const lines = cleanOutput.split(/\r?\n/);
 
   let pendingContextBefore: Array<{ line: number; text: string }> = [];
-  let lastMatch: { item: MatchItem; contextAfterCount: number } | null = null;
+  let lastMatch: ActiveMatch | null = null;
 
   for (const line of lines) {
     if (!line.trim()) continue;
@@ -108,11 +124,12 @@ function parseGrepOutput(cleanOutput: string, basePath?: string): MatchItem[] {
       const rawText = match[3];
 
       let content = "";
-      if (pendingContextBefore.length > 0) {
+      if (requestedContext > 0 && pendingContextBefore.length > 0) {
         content = pendingContextBefore.map((c) => `  ${c.line}- ${c.text}`).join("\n") + "\n";
-        pendingContextBefore = [];
       }
-      if (content.length > 0) {
+      pendingContextBefore = [];
+
+      if (requestedContext > 0) {
         content += `> ${startLine}: ${rawText}`;
       } else {
         content = rawText;
@@ -124,19 +141,28 @@ function parseGrepOutput(cleanOutput: string, basePath?: string): MatchItem[] {
         content,
       };
       matches.push(matchItem);
-      lastMatch = { item: matchItem, contextAfterCount: 0 };
+      lastMatch = { item: matchItem, lastLine: startLine, contextAfterCount: 0 };
     } else {
       const ctxMatch = line.match(/^((?:[a-zA-Z]:)?[^:\n]+?)-(\d+)-(?:(?:\d+)-)?(.*)$/);
       if (ctxMatch) {
         const lineNum = parseInt(ctxMatch[2], 10);
         const text = ctxMatch[3];
-        if (lastMatch && lastMatch.contextAfterCount < 20) {
+        if (
+          lastMatch &&
+          requestedContext > 0 &&
+          lineNum === lastMatch.lastLine + 1 &&
+          lastMatch.contextAfterCount < requestedContext
+        ) {
           lastMatch.item.content += `\n  ${lineNum}- ${text}`;
+          lastMatch.lastLine = lineNum;
           lastMatch.contextAfterCount++;
         } else {
-          pendingContextBefore.push({ line: lineNum, text });
-          if (pendingContextBefore.length > 20) {
-            pendingContextBefore.shift();
+          lastMatch = null;
+          if (requestedContext > 0) {
+            pendingContextBefore.push({ line: lineNum, text });
+            if (pendingContextBefore.length > requestedContext) {
+              pendingContextBefore.shift();
+            }
           }
         }
       }
@@ -160,14 +186,13 @@ async function runRgSearch(binary: string, params: Partial<SearchParams>): Promi
   if (params.multiline) args.push("-U");
   if (params.type === "text") args.push("-F");
   if (params.wordMatch) args.push("-w");
-  if (params.context && params.context > 0) args.push("-C", String(params.context));
+  const ctx = params.context ?? 0;
+  if (ctx > 0) args.push("-C", String(ctx));
 
   if (params.filePattern) {
     for (const pat of splitGlobList(params.filePattern)) {
       args.push("-g", pat);
     }
-  } else if (params.fileType) {
-    args.push("-t", params.fileType);
   }
 
   if (params.excludePattern) {
@@ -177,11 +202,16 @@ async function runRgSearch(binary: string, params: Partial<SearchParams>): Promi
   }
 
   if (params.noIgnore) args.push("--no-ignore");
-  if (params.includeHidden) args.push("-.");
+  if (params.includeHidden) {
+    args.push("-.");
+    if (!params.noIgnore) {
+      args.push("-g", "!.git/**", "-g", "!.git");
+    }
+  }
   args.push("-e", params.query || "", "--", targetPath);
 
   const result = await safeSpawn(binary, args, undefined, basePath);
-  return parseRgJsonOutput(result.stdout, basePath);
+  return parseRgJsonOutput(result.stdout, basePath, ctx);
 }
 
 /**
@@ -198,7 +228,8 @@ async function runUgrepSearch(binary: string, params: Partial<SearchParams>): Pr
   if (params.type === "text") args.push("-F");
   else args.push("-P"); // PCRE2 regex
   if (params.wordMatch) args.push("-w");
-  if (params.context && params.context > 0) args.push("-C", String(params.context));
+  const ctx = params.context ?? 0;
+  if (ctx > 0) args.push("-C", String(ctx));
 
   if (params.filePattern) {
     for (const pat of splitGlobList(params.filePattern)) {
@@ -213,11 +244,16 @@ async function runUgrepSearch(binary: string, params: Partial<SearchParams>): Pr
   }
 
   if (params.noIgnore) args.push("--no-ignore");
-  if (params.includeHidden) args.push("-.");
+  if (params.includeHidden) {
+    args.push("-.");
+    if (!params.noIgnore) {
+      args.push("-g", "!.git/**", "-g", "!.git");
+    }
+  }
   args.push("-e", params.query || "", "--", targetPath);
 
   const result = await safeSpawn(binary, args, undefined, basePath);
-  return parseGrepOutput(stripAnsi(result.stdout).trim(), basePath);
+  return parseGrepOutput(stripAnsi(result.stdout).trim(), basePath, ctx);
 }
 
 /**
@@ -235,7 +271,8 @@ async function runGitGrepSearch(binary: string, params: Partial<SearchParams>): 
   if (params.type === "text") args.push("-F");
   else args.push("-E");
   if (params.wordMatch) args.push("-w");
-  if (params.context && params.context > 0) args.push("-C", String(params.context));
+  const ctx = params.context ?? 0;
+  if (ctx > 0) args.push("-C", String(ctx));
   args.push("-e", query);
 
   const relTarget = toRelativePath(targetPath, basePath);
@@ -264,7 +301,7 @@ async function runGitGrepSearch(binary: string, params: Partial<SearchParams>): 
   }
 
   const result = await safeSpawn(binary, args, undefined, basePath);
-  return parseGrepOutput(stripAnsi(result.stdout).trim(), basePath);
+  return parseGrepOutput(stripAnsi(result.stdout).trim(), basePath, ctx);
 }
 
 /**
@@ -297,12 +334,12 @@ export async function runRipgrepFilesWithMatches(
     else if (params.caseSensitive === false) args.push("-i");
     else args.push("-S");
 
+    if (params.multiline) args.push("-U");
+
     if (params.filePattern) {
       for (const pat of splitGlobList(params.filePattern)) {
         args.push("-g", pat);
       }
-    } else if (params.fileType) {
-      args.push("-t", params.fileType);
     }
 
     if (params.excludePattern) {
@@ -311,7 +348,12 @@ export async function runRipgrepFilesWithMatches(
       }
     }
     if (params.noIgnore) args.push("--no-ignore");
-    if (params.includeHidden) args.push("-.");
+    if (params.includeHidden) {
+      args.push("-.");
+      if (!params.noIgnore) {
+        args.push("-g", "!.git/**", "-g", "!.git");
+      }
+    }
     args.push("-e", params.query || "", "--", targetPath);
 
     const result = await safeSpawn(engine.binary, args, undefined, basePath);
@@ -387,14 +429,11 @@ export async function runRipgrepCount(params: Partial<CountParams>): Promise<{ t
   }
 
   // rg or ugrep (-H ensures filename is always emitted even for a single target file)
-  const args: string[] = ["-H", "--color", "never"];
+  const args: string[] = ["-H", "--color", "never", "-c"];
   if (params.caseSensitive === true) args.push("-s");
   else if (params.caseSensitive === false) args.push("-i");
   else if (engine.name === "rg") args.push("-S");
   else if (engine.name === "ugrep") args.push("-j");
-
-  if (params.countLines !== false || engine.name === "ugrep") args.push("-c");
-  else args.push("--count-matches");
 
   if (params.type === "text") args.push("-F");
 
@@ -402,8 +441,6 @@ export async function runRipgrepCount(params: Partial<CountParams>): Promise<{ t
     for (const pat of splitGlobList(params.filePattern)) {
       args.push("-g", pat);
     }
-  } else if (params.fileType && engine.name === "rg") {
-    args.push("-t", params.fileType);
   }
 
   if (params.excludePattern) {
@@ -444,11 +481,6 @@ function nativeNodeListFiles(targetDir: string, basePath: string, params: Partia
   const includeRegexes = params.filePattern
     ? splitGlobList(params.filePattern).map(globToRegExp)
     : [];
-
-  if (params.fileType) {
-    const mapped = FILE_TYPE_GLOBS[params.fileType.toLowerCase()] || `*.${params.fileType}`;
-    includeRegexes.push(...splitGlobList(mapped).map(globToRegExp));
-  }
 
   const excludeRegexes = params.excludePattern
     ? splitGlobList(params.excludePattern)
@@ -502,8 +534,6 @@ export async function runRipgrepListFiles(params: Partial<ListFilesParams>): Pro
         for (const pat of splitGlobList(params.filePattern)) {
           args.push("-g", pat);
         }
-      } else if (params.fileType) {
-        args.push("-t", params.fileType);
       }
 
       if (params.excludePattern) {
@@ -512,7 +542,12 @@ export async function runRipgrepListFiles(params: Partial<ListFilesParams>): Pro
         }
       }
       if (params.noIgnore) args.push("--no-ignore");
-      if (params.includeHidden) args.push("-.");
+      if (params.includeHidden) {
+        args.push("-.");
+        if (!params.noIgnore) {
+          args.push("-g", "!.git/**", "-g", "!.git");
+        }
+      }
       args.push("--", targetPath);
 
       const result = await safeSpawn(engine.binary, args, undefined, basePath);
@@ -537,10 +572,6 @@ export async function runRipgrepListFiles(params: Partial<ListFilesParams>): Pro
       const includeRegexes = params.filePattern
         ? splitGlobList(params.filePattern).map(globToRegExp)
         : [];
-      if (params.fileType) {
-        const mapped = FILE_TYPE_GLOBS[params.fileType.toLowerCase()] || `*.${params.fileType}`;
-        includeRegexes.push(...splitGlobList(mapped).map(globToRegExp));
-      }
 
       const excludeRegexes = params.excludePattern
         ? splitGlobList(params.excludePattern)

@@ -20,59 +20,18 @@ export async function handleFindSymbols(params: FindSymbolsParams) {
     };
   }
 
-  // 1. JSON output format
-  if (params.outputFormat === "json") {
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            {
-              engine,
-              totalSymbols: symbols.length,
-              symbols,
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    };
-  }
-
-  // 2. Compact output format
-  if (params.outputFormat === "compact") {
-    const lines = symbols.map((s) => {
-      const sig = s.signature ? `: ${truncateLine(s.signature, 80)}` : "";
-      return `${s.file}:${s.line}: [${s.kind}] ${s.name}${sig}`;
-    });
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Found ${symbols.length} symbols (Engine: ${engine}):\n\n${lines.join("\n")}`,
-        },
-      ],
-    };
-  }
-
-  // 3. Table output format (default markdown table)
-  const rows = symbols.map((s) => {
-    const loc = `${s.file}:${s.line}`;
-    const scope = s.containerName ? ("`" + s.containerName + "`") : "-";
-    const sig = s.signature ? ("`" + truncateLine(s.signature.replace(/\|/g, "\\|"), 60) + "`") : "-";
-    return `| \`${s.name}\` | \`${s.kind}\` | ${loc} | ${scope} | ${sig} |`;
+  const lines = symbols.map((s) => {
+    const scope = s.containerName ? ` (${s.containerName})` : "";
+    const sig = s.signature ? `: ${truncateLine(s.signature, 100)}` : "";
+    return `${s.file}:${s.line}: [${s.kind}] ${s.name}${scope}${sig}`;
   });
 
-  const tableHeader = [
-    `Found ${symbols.length} symbols (Engine: ${engine}):`,
-    "",
-    "| Name | Kind | Location | Scope | Signature |",
-    "| :--- | :--- | :--- | :--- | :--- |",
-    ...rows,
-  ].join("\n");
-
   return {
-    content: [{ type: "text", text: tableHeader }],
+    content: [
+      {
+        type: "text",
+        text: `Found ${symbols.length} symbols (Engine: ${engine}):\n\n${lines.join("\n")}`,
+      },
+    ],
   };
 }

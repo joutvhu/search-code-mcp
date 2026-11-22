@@ -24,8 +24,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
-        run: npm run check
+      - name: Install ast-grep for tests
+        run: npm install -g @ast-grep/cli
+
+      - name: Run test suite
+        run: npm test
 
       - name: Build single-file bundle
         run: npm run build

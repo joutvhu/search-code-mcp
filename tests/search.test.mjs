@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { handleSearch } from "../.test-dist/handlers/search.js";
+import { globToRegExp } from "../.test-dist/utils/paths.js";
 
 describe("Search Handler Tests", () => {
   it("should perform text search with ripgrep", async () => {
@@ -35,6 +36,24 @@ describe("Search Handler Tests", () => {
 
     assert.ok(!res.isError);
     assert.ok(res.content[0].text.includes("handleReplace"), "Should include neighboring context lines");
+  });
+
+  it("should not bleed context lines between distant matches in same file", async () => {
+    const res = await handleSearch({
+      query: "safeSpawn",
+      type: "text",
+      path: "./src/engines/astgrep.ts",
+      context: 2,
+    });
+
+    assert.ok(!res.isError);
+    const text = res.content[0].text;
+    // Line 3 is import { safeSpawn }... neighboring lines 1-5
+    // Line 121 is inside runAstGrepPattern
+    // Line 121's context before should NOT bleed into Line 3's context after
+    assert.ok(text.includes("> 3:"));
+    assert.ok(text.includes("> 118:"));
+    assert.ok(!text.includes("117-   try {\n\nsrc"), "Context lines of next match should not be attached to match at line 3");
   });
 
   it("should use smart-case when caseSensitive is omitted", async () => {
@@ -101,17 +120,6 @@ rule:
     assert.ok(res.content[0].text.includes("Found"));
   });
 
-  it("should perform symbol search", async () => {
-    const res = await handleSearch({
-      query: "resolveTarget",
-      type: "symbol",
-      path: "./src/utils/paths.ts",
-    });
-
-    assert.ok(!res.isError);
-    assert.ok(res.content[0].text.includes("resolveTarget"));
-  });
-
   it("should support pagination caching across subdirectories even when follow-up omits path", async () => {
     const firstPage = await handleSearch({
       query: "export",
@@ -161,6 +169,13 @@ rule:
 
     assert.ok(!res.isError, `Should not error on brace glob: ${res.content?.[0]?.text}`);
     assert.ok(res.content[0].text.includes("Found"));
+  });
+
+  it("should match brace expansion with wildcard using globToRegExp", () => {
+    const rx = globToRegExp("{*.ts,*.js}");
+    assert.ok(rx.test("foo.ts"));
+    assert.ok(rx.test("bar.js"));
+    assert.ok(!rx.test("baz.json"));
   });
 
   it("should return valid JSON when search has 0 matches with outputFormat json", async () => {

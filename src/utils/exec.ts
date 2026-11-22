@@ -272,8 +272,16 @@ export function safeSpawn(
       if (settled) return;
       settled = true;
       try {
-        child.kill("SIGTERM");
-      } catch {}
+        if (isBatchScript && child.pid) {
+          spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+        } else {
+          child.kill("SIGTERM");
+        }
+      } catch {
+        try {
+          child.kill("SIGTERM");
+        } catch {}
+      }
       reject(new Error(`Command '${executable}' timed out after ${timeoutMs}ms.`));
     }, timeoutMs);
 
@@ -298,8 +306,16 @@ export function safeSpawn(
       totalBytes += Buffer.byteLength(chunk, "utf8");
       if (totalBytes > maxBufferBytes) {
         try {
-          child.kill("SIGTERM");
-        } catch {}
+          if (isBatchScript && child.pid) {
+            spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+          } else {
+            child.kill("SIGTERM");
+          }
+        } catch {
+          try {
+            child.kill("SIGTERM");
+          } catch {}
+        }
         finishError(
           new Error(
             `Command '${executable}' output exceeded max buffer (${Math.round(maxBufferBytes / (1024 * 1024))}MB). Narrow your search path or add filePattern/excludePattern.`
@@ -311,6 +327,26 @@ export function safeSpawn(
     });
 
     child.stderr?.on("data", (chunk: string) => {
+      totalBytes += Buffer.byteLength(chunk, "utf8");
+      if (totalBytes > maxBufferBytes) {
+        try {
+          if (isBatchScript && child.pid) {
+            spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+          } else {
+            child.kill("SIGTERM");
+          }
+        } catch {
+          try {
+            child.kill("SIGTERM");
+          } catch {}
+        }
+        finishError(
+          new Error(
+            `Command '${executable}' output exceeded max buffer (${Math.round(maxBufferBytes / (1024 * 1024))}MB). Narrow your search path or add filePattern/excludePattern.`
+          )
+        );
+        return;
+      }
       stderr += chunk;
     });
 

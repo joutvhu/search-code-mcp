@@ -185,6 +185,40 @@ describe("Replace Handler Tests", () => {
     );
   });
 
+  it("should replace $10 as $1 followed by literal 0 when only 1 capture group exists", async () => {
+    const dir = makeTempDir();
+    const file = path.join(dir, "backref.ts");
+    fs.writeFileSync(file, 'const val = "test";\n', "utf8");
+
+    const res = await handleReplace({
+      query: '"(test)"',
+      replacement: '"$10"',
+      type: "regex",
+      path: file,
+      dryRun: false,
+    });
+
+    assert.ok(!res.isError);
+    assert.equal(fs.readFileSync(file, "utf8"), 'const val = "test0";\n');
+  });
+
+  it("should replace multiline pattern across newlines in regex mode", async () => {
+    const dir = makeTempDir();
+    const file = path.join(dir, "multiline-replace.ts");
+    fs.writeFileSync(file, "foo\nbar\n", "utf8");
+
+    const res = await handleReplace({
+      query: "foo\\nbar",
+      replacement: "foobar",
+      type: "regex",
+      path: file,
+      dryRun: false,
+    });
+
+    assert.ok(!res.isError);
+    assert.equal(fs.readFileSync(file, "utf8"), "foobar\n");
+  });
+
   it("should throw error on invalid regex in regex replace mode", async () => {
     await assert.rejects(
       () =>

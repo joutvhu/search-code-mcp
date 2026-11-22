@@ -6,7 +6,6 @@ export const SearchTypeSchema = z.enum([
   "ast",
   "ast_rule",
   "hybrid",
-  "symbol",
 ]);
 
 export type SearchType = z.infer<typeof SearchTypeSchema>;
@@ -49,7 +48,7 @@ export const SearchSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Required for a new search (omit when using 'searchId'). Interpretation depends on 'type': PCRE2/Rust regex ('regex'), literal substring ('text'), ast-grep code pattern with $VAR / $$$ARGS ('ast'/'hybrid'), YAML rule with id/language/rule ('ast_rule'), or symbol name ('symbol')."
+      "Required for a new search (omit when using 'searchId'). Interpretation depends on 'type': PCRE2/Rust regex ('regex'), literal substring ('text'), ast-grep code pattern with $VAR / $$$ARGS ('ast'/'hybrid'), or YAML rule with id/language/rule ('ast_rule')."
     ),
   path: z
     .string()
@@ -59,7 +58,7 @@ export const SearchSchema = z.object({
   type: SearchTypeSchema.optional()
     .default("regex")
     .describe(
-      "Search mode: 'regex' (default, ripgrep regex), 'text' (exact literal match), 'ast' (structural AST pattern), 'ast_rule' (YAML rule with relational checks like inside/has/not), 'hybrid' (ripgrep pre-filter + ast-grep for large repos), 'symbol' (symbol declarations)."
+      "Search mode: 'regex' (default, ripgrep regex), 'text' (exact literal match), 'ast' (structural AST pattern), 'ast_rule' (YAML rule with relational checks like inside/has/not), or 'hybrid' (ripgrep pre-filter + ast-grep for large repos)."
     ),
 
   // File filtering & Gitignore
@@ -67,10 +66,6 @@ export const SearchSchema = z.object({
     .string()
     .optional()
     .describe("Glob pattern(s) to include, comma-separated, e.g. '*.{ts,tsx}' or 'src/**/*.py'."),
-  fileType: z
-    .string()
-    .optional()
-    .describe("File type shorthand, e.g. 'ts', 'js', 'py', 'rust', 'go', 'java', 'json'."),
   excludePattern: z
     .string()
     .optional()
@@ -96,7 +91,7 @@ export const SearchSchema = z.object({
   wordMatch: z
     .boolean()
     .optional()
-    .describe("[regex/text/symbol] Match whole words only (or exact symbol name in 'symbol' mode)."),
+    .describe("[regex/text] Match whole words only."),
   multiline: z
     .boolean()
     .optional()
@@ -118,13 +113,6 @@ export const SearchSchema = z.object({
     .describe(
       "Output format: 'content' (default, file:line + full match text), 'compact' (file:line: first-line snippet), 'files_only' (unique file paths), 'json' (structured JSON)."
     ),
-  maxLineLength: z
-    .number()
-    .int()
-    .min(50)
-    .optional()
-    .default(500)
-    .describe("Max characters per output line before truncation (min 50, default: 500)."),
 });
 
 export type SearchParams = z.infer<typeof SearchSchema>;
@@ -151,7 +139,7 @@ export const ReplaceSchema = z.object({
   type: ReplaceTypeSchema.optional()
     .default("ast")
     .describe(
-      "Replacement engine (NOTE: defaults to 'ast', unlike 'search' which defaults to 'regex'). Use 'ast' for structural rewrites, 'regex' for JS regex replacement, or 'text' for literal string replacement."
+      "Replacement engine (NOTE: defaults to 'ast', unlike 'search' and 'count' which default to 'regex'). Use 'ast' for structural rewrites, 'regex' for JS regex replacement, or 'text' for literal string replacement."
     ),
   dryRun: z
     .boolean()
@@ -169,19 +157,10 @@ export const ReplaceSchema = z.object({
     .string()
     .optional()
     .describe("Glob pattern(s) to include, comma-separated, e.g. '*.ts' or 'src/**/*.tsx'."),
-  fileType: z
-    .string()
-    .optional()
-    .describe("File type filter, e.g. 'ts', 'py', 'go', 'rust'."),
   excludePattern: z
     .string()
     .optional()
     .describe("Comma-separated glob patterns to exclude, e.g. '**/dist/**,**/*.test.ts'."),
-  noIgnore: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe("If true, also process gitignored files. Default: false."),
   language: z
     .string()
     .optional()
@@ -210,10 +189,6 @@ export const CountSchema = z.object({
     .string()
     .optional()
     .describe("Glob pattern(s) to include, comma-separated, e.g. '*.{ts,tsx}'."),
-  fileType: z
-    .string()
-    .optional()
-    .describe("File type filter, e.g. 'ts', 'py', 'rust'."),
   excludePattern: z
     .string()
     .optional()
@@ -223,11 +198,6 @@ export const CountSchema = z.object({
     .optional()
     .default(false)
     .describe("If true, include gitignored files. Default: false."),
-  countLines: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe("[regex/text only] If true (default), counts matching lines; if false, counts total individual occurrences."),
   perFile: z
     .boolean()
     .optional()
@@ -251,9 +221,9 @@ export const DumpTreeSchema = z.object({
   format: z
     .enum(["cst", "ast", "pattern"])
     .optional()
-    .default("cst")
+    .default("ast")
     .describe(
-      "Tree format: 'cst' (default, full concrete syntax tree with punctuation), 'ast' (named AST nodes only—best for finding 'kind:' names for ast_rule), 'pattern' (shows how ast-grep parses your pattern with $VAR/$$$)."
+      "Tree format: 'ast' (default, named AST nodes only—best for finding 'kind:' names for ast_rule), 'cst' (full concrete syntax tree with punctuation), 'pattern' (shows how ast-grep parses your pattern with $VAR/$$$)."
     ),
 });
 
@@ -269,10 +239,6 @@ export const ListFilesSchema = z.object({
     .string()
     .optional()
     .describe("Glob pattern to include, e.g. '*.{ts,tsx}' or '**/*.config.js'."),
-  fileType: z
-    .string()
-    .optional()
-    .describe("Ripgrep file type filter, e.g. 'ts', 'py', 'rust', 'json'."),
   excludePattern: z
     .string()
     .optional()
@@ -286,7 +252,7 @@ export const ListFilesSchema = z.object({
     .boolean()
     .optional()
     .default(false)
-    .describe("If true, include hidden dotfiles and dot-directories. Default: false."),
+    .describe("If true, include hidden dotfiles and dot-directories (excludes .git by default). Default: false."),
 });
 
 export type ListFilesParams = z.infer<typeof ListFilesSchema>;
@@ -341,19 +307,10 @@ export const FindSymbolsSchema = z.object({
     .string()
     .optional()
     .describe("Glob pattern to filter files, e.g. '*.ts' or '*.{ts,tsx}'."),
-  fileType: z
-    .string()
-    .optional()
-    .describe("File type filter, e.g. 'ts', 'py', 'rust', 'go'."),
   excludePattern: z
     .string()
     .optional()
     .describe("Comma-separated glob patterns to exclude, e.g. '**/node_modules/**,**/dist/**'."),
-  noIgnore: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe("If true, also search inside gitignored files. Default: false."),
   maxResults: z
     .number()
     .int()
@@ -362,11 +319,11 @@ export const FindSymbolsSchema = z.object({
     .optional()
     .default(100)
     .describe("Maximum number of symbols to return (1-500, default: 100)."),
-  outputFormat: z
-    .enum(["table", "json", "compact"])
+  includeLocals: z
+    .boolean()
     .optional()
-    .default("table")
-    .describe("Output format: 'table' (default markdown table), 'json', or 'compact' (file:line: [kind] name: signature)."),
+    .default(false)
+    .describe("If true, include local function/method variables. Default: false (focuses on top-level declarations, classes, interfaces, functions, methods, types)."),
 });
 
 export type FindSymbolsParams = z.infer<typeof FindSymbolsSchema>;

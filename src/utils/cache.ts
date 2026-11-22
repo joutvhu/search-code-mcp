@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import crypto from "node:crypto";
 import { resolveTarget, findProjectRoot, getWorkspaceRoot } from "./paths.js";
 
@@ -13,11 +14,12 @@ export interface CachedSearchData {
   matches: any[];
 }
 
+const GLOBAL_CACHE_DIR = path.join(os.tmpdir(), "search-code-mcp", "cache");
 const CACHE_DIR_NAME = ".cache/search-code";
 const DEFAULT_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const SEARCH_ID_REGEX = /^s_[0-9a-f]{8,}$/i;
 
-function getCacheDir(projectPath: string): string {
+function getProjectCacheDir(projectPath: string): string {
   const { targetPath, basePath } = resolveTarget(projectPath);
   const root = findProjectRoot(targetPath || basePath);
   return path.join(root, CACHE_DIR_NAME);
@@ -25,8 +27,12 @@ function getCacheDir(projectPath: string): string {
 
 function getCandidateCacheDirs(projectPath?: string): string[] {
   const dirs = new Set<string>();
+  // 1. Check global temp dir first
+  dirs.add(GLOBAL_CACHE_DIR);
+
+  // 2. Check project cache dirs for backwards compatibility
   if (projectPath) {
-    dirs.add(getCacheDir(projectPath));
+    dirs.add(getProjectCacheDir(projectPath));
   }
   dirs.add(path.join(findProjectRoot(getWorkspaceRoot()), CACHE_DIR_NAME));
   dirs.add(path.join(getWorkspaceRoot(), CACHE_DIR_NAME));
@@ -63,38 +69,53 @@ export function generateSearchId(): string {
 }
 
 /**
- * Save search results to project-scoped cache
+ * Save search results to global and project-scoped cache.
+ * Returns true if saved successfully, false otherwise.
  */
 export function saveSearchCache(
   projectPath: string,
   searchId: string,
   matches: any[],
   queryInfo: { query: string; type: string }
-): void {
-  if (!isValidSearchId(searchId)) return;
+): boolean {
+  if (!isValidSearchId(searchId)) return false;
 
+  const data: CachedSearchData = {
+    searchId,
+    timestamp: Date.now(),
+    projectPath: resolveTarget(projectPath).targetPath,
+    query: queryInfo.query,
+    type: queryInfo.type,
+    totalMatches: matches.length,
+    matches,
+  };
+  const payload = JSON.stringify(data);
+  let saved = false;
+
+  // 1. Primary write to global temp cache (immune to workspace read-only or git pollution)
   try {
-    const cacheDir = getCacheDir(projectPath);
-    ensureCacheDirWithGitignore(cacheDir);
-
-    const cacheFile = path.join(cacheDir, `${searchId}.json`);
-    const data: CachedSearchData = {
-      searchId,
-      timestamp: Date.now(),
-      projectPath: resolveTarget(projectPath).targetPath,
-      query: queryInfo.query,
-      type: queryInfo.type,
-      totalMatches: matches.length,
-      matches,
-    };
-
-    fs.writeFileSync(cacheFile, JSON.stringify(data), "utf8");
-
-    // Clean old caches
-    cleanExpiredCache(cacheDir, DEFAULT_TTL_MS);
+    ensureCacheDirWithGitignore(GLOBAL_CACHE_DIR);
+    const globalFile = path.join(GLOBAL_CACHE_DIR, `${searchId}.json`);
+    fs.writeFileSync(globalFile, payload, "utf8");
+    cleanExpiredCache(GLOBAL_CACHE_DIR, DEFAULT_TTL_MS);
+    saved = true;
   } catch (err) {
-    console.error("Failed to write search cache:", err);
+    console.warn("Failed to write global search cache:", err);
   }
+
+  // 2. Secondary write to project cache if workspace allows
+  try {
+    const projectCacheDir = getProjectCacheDir(projectPath);
+    ensureCacheDirWithGitignore(projectCacheDir);
+    const cacheFile = path.join(projectCacheDir, `${searchId}.json`);
+    fs.writeFileSync(cacheFile, payload, "utf8");
+    cleanExpiredCache(projectCacheDir, DEFAULT_TTL_MS);
+    saved = true;
+  } catch {
+    // Ignore secondary write failures
+  }
+
+  return saved;
 }
 
 /**
@@ -140,7 +161,7 @@ export function readSearchCache(
         nextOffset,
       };
     } catch (err) {
-      console.error(`Failed to read search cache '${searchId}':`, err);
+      console.warn(`Failed to read search cache '${searchId}':`, err);
       return null;
     }
   }
@@ -153,9 +174,13 @@ export function readSearchCache(
  */
 export function cleanExpiredCache(cacheDirOrProjectPath: string, ttlMs: number = DEFAULT_TTL_MS): void {
   try {
-    const cacheDir = cacheDirOrProjectPath.endsWith(path.normalize(CACHE_DIR_NAME))
-      ? cacheDirOrProjectPath
-      : getCacheDir(cacheDirOrProjectPath);
+    let cacheDir = cacheDirOrProjectPath;
+    if (cacheDirOrProjectPath === GLOBAL_CACHE_DIR) {
+      cacheDir = GLOBAL_CACHE_DIR;
+    } else if (!cacheDirOrProjectPath.endsWith(path.normalize(CACHE_DIR_NAME))) {
+      cacheDir = getProjectCacheDir(cacheDirOrProjectPath);
+    }
+
     if (!fs.existsSync(cacheDir)) return;
 
     const now = Date.now();

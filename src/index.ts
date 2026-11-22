@@ -63,7 +63,7 @@ server.registerTool(
   {
     title: "Search Code",
     description:
-      "Search code across files using ripgrep ('regex' default, 'text'), ast-grep ('ast' pattern, 'ast_rule' YAML rule), 'hybrid' (ripgrep pre-filter + ast-grep for large repos), or 'symbol'. Returns paginated results with a 'searchId' when total matches exceed 'limit'. Prefer 'find_symbols' when you want structured symbol tables or a single-file outline, and 'count' when you only need match counts.",
+      "Search code across files using ripgrep ('regex' default, 'text'), ast-grep ('ast' pattern, 'ast_rule' YAML rule), or 'hybrid' (ripgrep pre-filter + ast-grep for large repos). Returns paginated results with a 'searchId' when total matches exceed 'limit'. Prefer 'find_symbols' when you want structured symbol tables or a single-file outline, and 'count' when you only need match counts.",
     inputSchema: SearchSchema.shape,
     annotations: {
       readOnlyHint: true,

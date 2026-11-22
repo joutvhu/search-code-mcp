@@ -9,7 +9,6 @@ export async function handleCount(params: CountParams) {
       query: params.query,
       language: params.language,
       filePattern: params.filePattern,
-      fileType: params.fileType,
       excludePattern: params.excludePattern,
       noIgnore: params.noIgnore,
     });

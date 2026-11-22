@@ -33,7 +33,7 @@ function checkToolVersion(tool: string): string | null {
     const target = isWin && !actualTool.endsWith(".exe") && !actualTool.endsWith(".cmd") ? `${actualTool}.cmd` : actualTool;
 
     let res = isWin
-      ? spawnSync(`${actualTool} --version`, { encoding: "utf8", shell: true })
+      ? spawnSync(`"${actualTool}" --version`, { encoding: "utf8", shell: true })
       : spawnSync(actualTool, ["--version"], { encoding: "utf8" });
 
     if (res.status === 0 && res.stdout) {
@@ -44,7 +44,7 @@ function checkToolVersion(tool: string): string | null {
     }
 
     if (isWin && target !== actualTool) {
-      res = spawnSync(`${target} --version`, { encoding: "utf8", shell: true });
+      res = spawnSync(`"${target}" --version`, { encoding: "utf8", shell: true });
       if (res.status === 0 && res.stdout) {
         if ((tool === "sg" || tool === "ast-grep") && !/ast-grep/i.test(res.stdout)) {
           return null;
@@ -213,7 +213,7 @@ export async function runEngineCli(): Promise<void> {
     ? "universal-ctags"
     : astVer
     ? "ast-grep"
-    : rgVer
+    : rgVer || ugrepVer || gitVer
     ? "ripgrep heuristic"
     : "None";
   console.log(`  ➜ Active Symbol Engine: ${activeSymbol}\n`);

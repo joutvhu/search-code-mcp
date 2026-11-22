@@ -17,7 +17,7 @@ Use this guide for `search-code-mcp` quirks and `ast-grep` syntax rules that are
 - **Filter parameters by mode:**
   - `caseSensitive`, `context`, `wordMatch`, `multiline`, `includeHidden` only apply to `ripgrep` (`regex`/`text`).
   - `excludePattern` and `filePattern` accept **comma-separated** globs (e.g. `"**/dist/**,**/*.test.ts"`).
-- **Pagination cache:** Results exceeding `limit` are cached for 30 minutes under `<project-root>/.cache/search-code/`. Follow up with `search({ searchId, offset, limit })` without re-sending `query`.
+- **Pagination cache:** Results exceeding `limit` are cached for 30 minutes in system temp storage. Follow up with `search({ searchId, offset, limit })` without re-sending `query`.
 - **Single-file outline:** Call `find_symbols({ path: "path/to/file.ts", name: "" })` to list all declarations in a file without reading the entire file.
 
 ---

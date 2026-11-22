@@ -20,10 +20,10 @@ Designed specifically for AI Coding Agents (**Cursor**, **Claude Desktop**, **Ki
   - **AST Search**: `ast-grep` ➜ alias `sg`.
   - **File Listing**: `rg --files` ➜ `git ls-files` ➜ Native Node.js recursive directory walk.
 - **Hybrid 2-Tier Search (`type: "hybrid"`)**: Scans candidate files with ripgrep in ~30ms, then parses AST with ast-grep _only_ on matching files—giving **10x–50x speedups** over pure AST searches on large codebases.
-- **Project-Scoped Pagination Cache (`./.cache/search-code/`)**:
+- **Fast Pagination Cache**:
   - Automatically activates only when results exceed your chunk limit.
   - Returns a `searchId` for instant sub-millisecond scrolling through next pages (`offset` / `limit`) without re-scanning disk.
-  - Creates an isolated `./.cache/search-code/` directory with an auto-generated `.gitignore` so cache files are never committed to git.
+  - Stored in isolated system temp storage without creating untracked files or polluting git working trees.
 - **Gitignore Respected by Default**: Both ripgrep and ast-grep automatically respect your project's `.gitignore` (`noIgnore: false` by default). Pass `noIgnore: true` only when you need to inspect ignored files.
 - **Safe Structural Refactoring (`replace`)**: Defaults to `dryRun: true` to generate unified git-style diff previews and safety limits (`maxReplacements: 50`) before writing any changes to disk.
 - **Flexible Path Handling**: Supports both relative paths (e.g. `"."`, `"./src"`) and absolute paths as input. By default, tool outputs return absolute paths. Set `RELATIVE_PATHS=true` in environment (or pass `--relative-paths`) to format output paths as clean relative paths to save LLM context window tokens.
@@ -131,19 +131,18 @@ Unified search engine supporting regex, literal text, AST patterns, relational Y
 | :--------------- | :-------- | :---------- | :------------------------------------------------------------------------------------------- |
 | `query`          | `string`  | -           | Search query: text, regex, AST pattern, or YAML rule. _(Optional if `searchId` is provided)_ |
 | `path`           | `string`  | `"."`       | Target directory or file to search                                                           |
-| `type`           | `enum`    | `"regex"`   | Search engine mode: `"regex"`, `"text"`, `"ast"`, `"ast_rule"`, `"hybrid"`, `"symbol"`       |
+| `type`           | `enum`    | `"regex"`   | Search engine mode: `"regex"`, `"text"`, `"ast"`, `"ast_rule"`, `"hybrid"`                    |
 | `searchId`       | `string`  | -           | ID of a previous search to view remaining results instantly from cache                       |
 | `offset`         | `number`  | `1`         | Starting result index for pagination (1-based)                                               |
 | `limit`          | `number`  | `50`        | Maximum matches to return in this chunk                                                      |
 | `filePattern`    | `string`  | -           | Glob pattern to filter files (e.g. `"*.{ts,tsx}"`, `"!**/*.spec.ts"`)                        |
-| `fileType`       | `string`  | -           | Ripgrep file type filter (e.g. `"ts"`, `"py"`, `"rust"`, `"json"`)                           |
 | `excludePattern` | `string`  | -           | Glob pattern to exclude (e.g. `"**/dist/**"`)                                                |
 | `noIgnore`       | `boolean` | `false`     | If `true`, searches inside `.gitignore`-ignored files                                        |
 | `caseSensitive`  | `boolean` | smart-case  | Case sensitivity                                                                             |
 | `context`        | `number`  | `0`         | Number of context lines before and after match (`-C`)                                        |
 | `wordMatch`      | `boolean` | `false`     | Match whole words only (`-w`)                                                                |
 | `multiline`      | `boolean` | `false`     | Match regex across line breaks (`-U`)                                                        |
-| `includeHidden`  | `boolean` | `false`     | Search hidden files and folders (`-.`)                                                       |
+| `includeHidden`  | `boolean` | `false`     | Search hidden files and folders (`-.`, automatically excludes `.git` directory)             |
 | `language`       | `string`  | auto        | Programming language for AST mode (auto-detected from file extension if omitted)             |
 | `outputFormat`   | `enum`    | `"content"` | `"content"` (full snippets), `"compact"` (`file:line`), `"files_only"`, or `"json"`          |
 
@@ -176,7 +175,7 @@ rule:
 });
 
 // Retrieve next chunk from cache using searchId
-search({ searchId: "s_9f2a7b", offset: 51, limit: 50 });
+search({ searchId: "s_9f2a7b12", offset: 51, limit: 50 });
 ```
 
 ---
@@ -194,9 +193,7 @@ Structural code refactoring and replacement engine. Supports AST rewrite pattern
 | `dryRun`          | `boolean` | `true`       | If `true`, outputs unified diff preview without modifying files on disk |
 | `maxReplacements` | `number`  | `50`         | Safety limit on maximum matches to replace                              |
 | `filePattern`     | `string`  | -            | Glob pattern to filter files                                            |
-| `fileType`        | `string`  | -            | File type filter                                                        |
 | `excludePattern`  | `string`  | -            | Glob pattern to exclude                                                 |
-| `noIgnore`        | `boolean` | `false`      | Whether to modify `.gitignore`-ignored files                            |
 | `language`        | `string`  | auto         | Programming language for AST mode                                       |
 
 #### Examples:
@@ -223,20 +220,18 @@ replace({
 
 ### 3. `count`
 
-Count matching occurrences or lines across files without returning match content, saving tokens.
+Count matching occurrences across files without returning match content, saving tokens.
 
-| Parameter        | Type      | Default      | Description                                                  |
-| :--------------- | :-------- | :----------- | :----------------------------------------------------------- |
-| `query`          | `string`  | **Required** | Search pattern to count                                      |
-| `path`           | `string`  | `"."`        | Target directory or file                                     |
-| `type`           | `enum`    | `"regex"`    | Engine mode: `"regex"`, `"text"`, `"ast"`                    |
-| `countLines`     | `boolean` | `false`      | Count matching lines (`true`) or total occurrences (`false`) |
-| `perFile`        | `boolean` | `false`      | Show breakdown of matches per file                           |
-| `filePattern`    | `string`  | -            | Glob pattern filter                                          |
-| `fileType`       | `string`  | -            | File type filter                                             |
-| `excludePattern` | `string`  | -            | Glob exclude filter                                          |
-| `noIgnore`       | `boolean` | `false`      | Search inside ignored files                                  |
-| `language`       | `string`  | auto         | Language for AST mode                                        |
+| Parameter        | Type      | Default      | Description                               |
+| :--------------- | :-------- | :----------- | :---------------------------------------- |
+| `query`          | `string`  | **Required** | Search pattern to count                   |
+| `path`           | `string`  | `"."`        | Target directory or file                  |
+| `type`           | `enum`    | `"regex"`    | Engine mode: `"regex"`, `"text"`, `"ast"` |
+| `perFile`        | `boolean` | `false`      | Show breakdown of matches per file        |
+| `filePattern`    | `string`  | -            | Glob pattern filter                       |
+| `excludePattern` | `string`  | -            | Glob exclude filter                       |
+| `noIgnore`       | `boolean` | `false`      | Search inside ignored files               |
+| `language`       | `string`  | auto         | Language for AST mode                     |
 
 #### Examples:
 
@@ -257,12 +252,10 @@ Find and navigate code definitions (functions, classes, interfaces, methods, typ
 | `path`           | `string`  | `"."`     | Target directory or file path                                                                                  |
 | `kinds`          | `array`   | -         | Filter by symbol kinds: `"function"`, `"class"`, `"interface"`, `"method"`, `"variable"`, `"type"`, `"struct"`, `"enum"` |
 | `exactMatch`     | `boolean` | `false`   | If `true`, matches exact symbol name. If `false` (default), matches prefix or substring                        |
-| `filePattern`    | `string`  | -         | Glob pattern filter (e.g. `"*.ts"` or `"*.py"`)                                                                |
-| `fileType`       | `string`  | -         | Ripgrep file type filter (e.g. `"ts"`, `"py"`, `"rust"`)                                                    |
+| `filePattern`    | `string`  | -         | Glob pattern to filter files (e.g. `"*.ts"` or `"*.py"`)                                                                |
 | `excludePattern` | `string`  | -         | Glob pattern to exclude                                                                                        |
-| `noIgnore`       | `boolean` | `false`   | Search inside ignored files                                                                                    |
 | `maxResults`     | `number`  | `100`     | Maximum number of symbols to return                                                                            |
-| `outputFormat`   | `enum`    | `"table"` | Output format: `"table"` (default markdown table), `"compact"` (`file:line: [kind] name`), or `"json"`            |
+| `includeLocals`  | `boolean` | `false`   | If `true`, includes local function/method variables. Default focuses on top-level definitions and declarations  |
 
 #### Examples:
 
@@ -273,8 +266,8 @@ find_symbols({ name: "handleSearch", exactMatch: true });
 // List all functions in a module/directory
 find_symbols({ path: "src/handlers", kinds: ["function"] });
 
-// Search across whole repo with compact output
-find_symbols({ name: "Schema", outputFormat: "compact" });
+// Outline of a single file
+find_symbols({ path: "src/index.ts" });
 ```
 
 ### 5. `dump_tree`
@@ -285,7 +278,7 @@ Inspect concrete syntax trees (CST) or AST node structures to craft precise ast-
 | :--------- | :------- | :----------- | :--------------------------------------------------------------------- |
 | `code`     | `string` | **Required** | Code snippet to inspect                                                |
 | `language` | `string` | **Required** | Programming language (e.g. `"typescript"`, `"python"`, `"rust"`)       |
-| `format`   | `enum`   | `"cst"`      | Tree format: `"cst"` (syntax tree with kinds), `"ast"`, or `"pattern"` |
+| `format`   | `enum`   | `"ast"`      | Tree format: `"ast"` (default, named AST kinds), `"cst"`, or `"pattern"` |
 
 #### Example:
 
@@ -293,7 +286,6 @@ Inspect concrete syntax trees (CST) or AST node structures to craft precise ast-
 dump_tree({
   code: "const calculate = (a, b) => a + b;",
   language: "typescript",
-  format: "cst",
 });
 ```
 
@@ -301,16 +293,15 @@ dump_tree({
 
 ### 6. `list_files`
 
-Enumerate files matching glob patterns or file types without scanning file contents.
+Enumerate files matching glob patterns without scanning file contents.
 
-| Parameter        | Type      | Default | Description                                |
-| :--------------- | :-------- | :------ | :----------------------------------------- |
-| `path`           | `string`  | `"."`   | Directory to search                        |
-| `filePattern`    | `string`  | -       | Glob pattern filter (e.g. `"*.config.js"`) |
-| `fileType`       | `string`  | -       | Ripgrep file type filter                   |
-| `excludePattern` | `string`  | -       | Glob pattern to exclude                    |
-| `noIgnore`       | `boolean` | `false` | List files ignored by `.gitignore`         |
-| `includeHidden`  | `boolean` | `false` | Include hidden files and folders           |
+| Parameter        | Type      | Default | Description                                                   |
+| :--------------- | :-------- | :------ | :------------------------------------------------------------ |
+| `path`           | `string`  | `"."`   | Directory to search                                           |
+| `filePattern`    | `string`  | -       | Glob pattern filter (e.g. `"*.config.js"`, `"*.{ts,tsx}"`)    |
+| `excludePattern` | `string`  | -       | Glob pattern to exclude                                       |
+| `noIgnore`       | `boolean` | `false` | List files ignored by `.gitignore`                            |
+| `includeHidden`  | `boolean` | `false` | Include hidden files (excludes `.git` directory automatically)|
 
 #### Example:
 

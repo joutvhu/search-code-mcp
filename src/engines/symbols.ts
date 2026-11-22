@@ -1,7 +1,8 @@
+import fs from "node:fs";
 import { FindSymbolsParams, SymbolItem, SymbolKind } from "../types.js";
-import { detectSymbolEngine, safeSpawn } from "../utils/exec.js";
-import { runRipgrepSearch } from "./ripgrep.js";
-import { runAstGrepPattern, FILE_TYPE_GLOBS } from "./astgrep.js";
+import { detectSymbolEngine, safeSpawn, ExecResult } from "../utils/exec.js";
+import { runRipgrepSearch, runRipgrepListFiles } from "./ripgrep.js";
+import { runAstGrepPattern } from "./astgrep.js";
 import {
   resolveTarget,
   formatOutputPath,
@@ -29,6 +30,20 @@ export function normalizeSymbolKind(raw: string): SymbolKind {
   return "other";
 }
 
+const KIND_PRIORITY: Record<string, number> = {
+  class: 1,
+  interface: 1,
+  struct: 1,
+  enum: 1,
+  trait: 1,
+  type: 2,
+  function: 3,
+  method: 3,
+  module: 4,
+  variable: 5,
+  other: 6,
+};
+
 const CONTROL_FLOW_KEYWORDS = new Set([
   "if",
   "else",
@@ -45,7 +60,8 @@ const CONTROL_FLOW_KEYWORDS = new Set([
   "sizeof",
 ]);
 
-export function extractSymbolFromLine(line: string): { kind: SymbolKind; name: string } | null {
+export function extractSymbolFromLine(line: string, includeLocals: boolean = false): { kind: SymbolKind; name: string } | null {
+  const isIndented = /^\s+/.test(line);
   const trimmed = line.trim();
   if (
     !trimmed ||
@@ -58,31 +74,39 @@ export function extractSymbolFromLine(line: string): { kind: SymbolKind; name: s
     return null;
   }
 
-  // 1. Standard declaration keywords (JS/TS, Python, Rust, Go, Java, C#, PHP, etc.)
-  let m = trimmed.match(
+  // 1. Go method receiver: func (r *Receiver) MethodName(...)
+  let m = trimmed.match(/^func\s+\([^)]+\)\s+([a-zA-Z0-9_]+)\s*\(/);
+  if (m) {
+    return { kind: "method", name: m[1] };
+  }
+
+  // 2. Standard declaration keywords (JS/TS, Python, Rust, Go, Java, C#, PHP, etc.)
+  m = trimmed.match(
     /^(?:export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:pub(?:\([^)]*\))?\s+)?(function\*?|class|interface|type|enum|struct|trait|def|fn|func)\s+([a-zA-Z0-9_$]+)/
   );
   if (m) {
     return { kind: normalizeSymbolKind(m[1]), name: m[2] };
   }
 
-  // 2. const/let/var arrow function
+  // 3. const/let/var arrow function
   m = trimmed.match(
     /^(?:export\s+)?(?:const|let|var)\s+([a-zA-Z0-9_$]+)\s*(?::[^=]+)?=\s*(?:async\s*)?(?:\([^)]*\)|[a-zA-Z0-9_$]+)\s*=>/
   );
   if (m) {
+    if (isIndented && !includeLocals) return null;
     return { kind: "function", name: m[1] };
   }
 
-  // 3. const/let/var declarations (variables, schemas, objects)
+  // 4. const/let/var declarations (variables, schemas, objects)
   m = trimmed.match(/^(?:export\s+)?(?:const|let|var)\s+([a-zA-Z0-9_$]+)\s*(?::[^=]+)?=/);
   if (m) {
+    if (isIndented && !includeLocals) return null;
     return { kind: "variable", name: m[1] };
   }
 
-  // 4. Method definitions in OOP languages (Java, C#, C++, TS/JS class methods)
+  // 5. Method definitions in OOP languages (Java, C#, C++, TS/JS class methods)
   m = trimmed.match(
-    /^(?:(?:public|private|protected|static|override|readonly|virtual|final|async)\s+)+(?:[a-zA-Z0-9_<>\[\]]+\s+)?([a-zA-Z0-9_]+)\s*\([^)]*\)\s*(?::\s*[^{]+)?\{/
+    /^(?:(?:public|private|protected|static|override|readonly|virtual|final|async)\s+)*(?:[a-zA-Z0-9_<>\[\]]+\s+)?([a-zA-Z0-9_]+)\s*\([^)]*\)\s*(?::\s*[^{]+)?\{/
   );
   if (m && !CONTROL_FLOW_KEYWORDS.has(m[1])) {
     return { kind: "method", name: m[1] };
@@ -96,21 +120,26 @@ async function runCtagsSymbols(
   params: Partial<FindSymbolsParams>
 ): Promise<SymbolItem[]> {
   const { targetPath, basePath } = resolveTarget(params.path);
-  const args = ["-R", "--output-format=json", "--fields=+n+K+S", "--quiet=yes", "-f", "-"];
+  const isFile = fs.existsSync(targetPath) && fs.statSync(targetPath).isFile();
 
-  if (!params.noIgnore) {
-    args.push("--exclude=.git", "--exclude=node_modules", "--exclude=dist");
-  }
-
-  if (params.excludePattern) {
-    for (const pat of splitGlobList(params.excludePattern)) {
-      args.push(`--exclude=${pat.replace(/^!/, "")}`);
+  let res: ExecResult;
+  if (isFile) {
+    const args = ["--output-format=json", "--fields=+n+K+S+s", "--quiet=yes", "-f", "-", targetPath];
+    res = await safeSpawn(binary, args, undefined, basePath);
+  } else {
+    // List matching non-ignored files using ripgrep so ctags doesn't scan .git, node_modules, dist, etc.
+    const files = await runRipgrepListFiles({
+      path: params.path,
+      filePattern: params.filePattern,
+      excludePattern: params.excludePattern,
+    });
+    if (files.length === 0) {
+      return [];
     }
+    const args = ["--output-format=json", "--fields=+n+K+S+s", "--quiet=yes", "-L", "-", "-f", "-"];
+    res = await safeSpawn(binary, args, files.join("\n"), basePath);
   }
 
-  args.push(targetPath);
-
-  const res = await safeSpawn(binary, args, undefined, basePath);
   const lines = res.stdout.split(/\r?\n/);
   const items: SymbolItem[] = [];
 
@@ -122,10 +151,6 @@ async function runCtagsSymbols(
   const includeRegexes = params.filePattern
     ? splitGlobList(params.filePattern).map(globToRegExp)
     : [];
-  const typeGlob = params.fileType
-    ? FILE_TYPE_GLOBS[params.fileType.toLowerCase()] || `*.${params.fileType}`
-    : null;
-  const typeRegex = typeGlob ? globToRegExp(typeGlob) : null;
 
   for (const line of lines) {
     if (!line.trim()) continue;
@@ -136,10 +161,20 @@ async function runCtagsSymbols(
       if (tag.path) {
         const rel = toRelativePath(tag.path, basePath);
         if (includeRegexes.length > 0 && !includeRegexes.some((rx) => rx.test(rel))) continue;
-        if (typeRegex && !typeRegex.test(rel)) continue;
       }
 
       const name: string = tag.name || "";
+      if (!name) continue;
+
+      // Skip numeric literal tags like _000
+      if (/^_\d+$/.test(name)) continue;
+
+      // Exclude local variables inside functions/methods unless includeLocals is explicitly true
+      const isLocal = tag.scopeKind === "function" || tag.scopeKind === "method";
+      if (isLocal && !params.includeLocals && !allowedKinds?.includes("variable")) {
+        continue;
+      }
+
       if (rawTargetName) {
         if (params.exactMatch) {
           if (name !== rawTargetName) continue;
@@ -153,20 +188,29 @@ async function runCtagsSymbols(
         continue;
       }
 
+      // Unescape pattern regex
+      const rawSig = tag.pattern
+        ? tag.pattern
+            .replace(/^\/\^?|\$?\/$/g, "")
+            .replace(/\\([/\\.^$*+?()[\]{}|])/g, "$1")
+            .trim()
+        : undefined;
+
       items.push({
         name,
         kind,
         file: formatOutputPath(tag.path, basePath),
         line: tag.line || 1,
         containerName: tag.scope || undefined,
-        signature: tag.pattern ? tag.pattern.replace(/^\/\^?|\$?\/$/g, "").trim() : undefined,
+        signature: rawSig,
       });
-
-      if (items.length >= maxResults) break;
     } catch {}
   }
 
-  return items;
+  // Sort by structural importance: classes/interfaces/types/functions before variables
+  items.sort((a, b) => (KIND_PRIORITY[a.kind] || 99) - (KIND_PRIORITY[b.kind] || 99));
+
+  return items.slice(0, maxResults);
 }
 
 async function runAstGrepSymbols(params: Partial<FindSymbolsParams>): Promise<SymbolItem[]> {
@@ -174,7 +218,6 @@ async function runAstGrepSymbols(params: Partial<FindSymbolsParams>): Promise<Sy
   const targetLower = rawTargetName.toLowerCase();
   const allowedKinds = params.kinds?.map((k) => k.toLowerCase());
 
-  // Only handle function queries via ast-grep when kinds are unrestricted or include 'function'
   if (allowedKinds && allowedKinds.length > 0 && !allowedKinds.includes("function")) {
     return [];
   }
@@ -183,9 +226,7 @@ async function runAstGrepSymbols(params: Partial<FindSymbolsParams>): Promise<Sy
     path: params.path,
     query: rawTargetName && params.exactMatch ? `function ${rawTargetName}($$$)` : "function $NAME($$$)",
     filePattern: params.filePattern,
-    fileType: params.fileType,
     excludePattern: params.excludePattern,
-    noIgnore: params.noIgnore,
   });
 
   const items: SymbolItem[] = [];
@@ -193,7 +234,7 @@ async function runAstGrepSymbols(params: Partial<FindSymbolsParams>): Promise<Sy
 
   for (const m of matches) {
     const firstLine = m.content.split(/\r?\n/)[0] || "";
-    const extracted = extractSymbolFromLine(firstLine);
+    const extracted = extractSymbolFromLine(firstLine, params.includeLocals);
     const name = extracted?.name || rawTargetName || "anonymous";
     const kind = extracted?.kind || "function";
 
@@ -243,9 +284,7 @@ async function runRipgrepSymbols(params: Partial<FindSymbolsParams>): Promise<Sy
     query,
     type: "regex",
     filePattern: params.filePattern,
-    fileType: params.fileType,
     excludePattern: params.excludePattern,
-    noIgnore: params.noIgnore,
     caseSensitive: params.exactMatch ? true : false,
     context: 0,
   });
@@ -254,7 +293,7 @@ async function runRipgrepSymbols(params: Partial<FindSymbolsParams>): Promise<Sy
 
   for (const match of rgMatches) {
     const line = match.content.trim();
-    const extracted = extractSymbolFromLine(line);
+    const extracted = extractSymbolFromLine(line, params.includeLocals);
     if (!extracted) continue;
 
     if (rawTargetName) {
@@ -277,11 +316,11 @@ async function runRipgrepSymbols(params: Partial<FindSymbolsParams>): Promise<Sy
       column: match.column,
       signature: line,
     });
-
-    if (items.length >= maxResults) break;
   }
 
-  return items;
+  items.sort((a, b) => (KIND_PRIORITY[a.kind] || 99) - (KIND_PRIORITY[b.kind] || 99));
+
+  return items.slice(0, maxResults);
 }
 
 export async function searchSymbols(
@@ -296,10 +335,10 @@ export async function searchSymbols(
     } catch {}
   }
 
-  if (engine.name === "ast-grep" && params.name) {
+  if (engine.name === "ast-grep" && params.name && params.kinds?.length === 1 && params.kinds[0] === "function") {
     try {
       const symbols = await runAstGrepSymbols(params);
-      if (symbols.length > 0 && params.kinds?.length === 1 && params.kinds[0] === "function") {
+      if (symbols.length > 0) {
         return { symbols, engine: "ast-grep" };
       }
     } catch {}

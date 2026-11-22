@@ -1,7 +1,7 @@
 import { SearchParams } from "../types.js";
 import { runRipgrepSearch } from "../engines/ripgrep.js";
 import { runAstGrepPattern, runAstGrepRule } from "../engines/astgrep.js";
-import { runHybridSearch, runSymbolSearch } from "../engines/hybrid.js";
+import { runHybridSearch } from "../engines/hybrid.js";
 import { formatMatchItems, MatchItem } from "../utils/formatters.js";
 import { validateYamlRule } from "../utils/validation.js";
 import {
@@ -9,6 +9,8 @@ import {
   readSearchCache,
   saveSearchCache,
 } from "../utils/cache.js";
+
+const DEFAULT_MAX_LINE_LENGTH = 500;
 
 export async function handleSearch(params: SearchParams) {
   const projectPath = params.path || ".";
@@ -35,7 +37,7 @@ export async function handleSearch(params: SearchParams) {
       cached.chunk,
       cached.totalMatches,
       params.outputFormat,
-      params.maxLineLength,
+      DEFAULT_MAX_LINE_LENGTH,
       {
         searchId: params.searchId,
         offset,
@@ -84,9 +86,6 @@ export async function handleSearch(params: SearchParams) {
     case "hybrid":
       matches = await runHybridSearch(params);
       break;
-    case "symbol":
-      matches = await runSymbolSearch(params);
-      break;
     default:
       matches = await runRipgrepSearch(params);
   }
@@ -117,7 +116,7 @@ export async function handleSearch(params: SearchParams) {
   // On-demand caching if results exceed current window or pagination is needed
   if (totalMatches > limit || offset > 1) {
     const searchId = generateSearchId();
-    saveSearchCache(projectPath, searchId, matches, {
+    const saved = saveSearchCache(projectPath, searchId, matches, {
       query: params.query,
       type: params.type || "regex",
     });
@@ -126,13 +125,15 @@ export async function handleSearch(params: SearchParams) {
       chunk,
       totalMatches,
       params.outputFormat,
-      params.maxLineLength,
-      {
-        searchId,
-        offset,
-        nextOffset: endIndex + 1,
-        hasMore,
-      }
+      DEFAULT_MAX_LINE_LENGTH,
+      saved
+        ? {
+            searchId,
+            offset,
+            nextOffset: endIndex + 1,
+            hasMore,
+          }
+        : undefined
     );
 
     return {
@@ -145,7 +146,7 @@ export async function handleSearch(params: SearchParams) {
     chunk,
     totalMatches,
     params.outputFormat,
-    params.maxLineLength
+    DEFAULT_MAX_LINE_LENGTH
   );
 
   return {

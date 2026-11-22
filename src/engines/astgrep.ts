@@ -41,7 +41,7 @@ function getBaseArgs(): string[] {
 
 function appendAstFilterArgs(
   args: string[],
-  params: { filePattern?: string; fileType?: string; excludePattern?: string; noIgnore?: boolean }
+  params: { filePattern?: string; excludePattern?: string; noIgnore?: boolean }
 ): void {
   if (params.noIgnore) {
     args.push("--no-ignore", "vcs", "--no-ignore", "dot");
@@ -51,9 +51,6 @@ function appendAstFilterArgs(
     for (const pat of splitGlobList(params.filePattern)) {
       if (pat) args.push("--globs", pat);
     }
-  } else if (params.fileType) {
-    const mapped = FILE_TYPE_GLOBS[params.fileType.toLowerCase()];
-    args.push("--globs", mapped || `*.${params.fileType}`);
   }
 
   if (params.excludePattern) {
@@ -243,8 +240,8 @@ export async function runAstGrepRewrite(params: ReplaceParams): Promise<AstRewri
       truncatedByLimit = true;
     }
 
-    const originalText = fs.readFileSync(absFile, "utf8");
-    const originalBuf = Buffer.from(originalText, "utf8");
+    const originalBuf = fs.readFileSync(absFile);
+    const originalText = originalBuf.toString("utf8");
 
     // Apply edits from highest byte offset to lowest to preserve earlier offsets
     const sortedDesc = [...selectedEdits].sort((a, b) => b.start - a.start);

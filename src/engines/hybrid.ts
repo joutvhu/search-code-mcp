@@ -2,7 +2,6 @@ import { MatchItem } from "../utils/formatters.js";
 import { runRipgrepFilesWithMatches } from "./ripgrep.js";
 import { runAstGrepPattern, FILE_TYPE_GLOBS } from "./astgrep.js";
 import { SearchParams } from "../types.js";
-import { searchSymbols } from "./symbols.js";
 
 const AST_BATCH_SIZE = 50;
 
@@ -34,8 +33,7 @@ export async function runHybridSearch(params: SearchParams): Promise<MatchItem[]
   const primaryKeyword = keywords.sort((a, b) => b.length - a.length)[0];
 
   let filePattern = params.filePattern;
-  let fileType = params.fileType;
-  if (!filePattern && !fileType && params.language) {
+  if (!filePattern && params.language) {
     const mapped = FILE_TYPE_GLOBS[params.language.toLowerCase()];
     if (mapped) {
       filePattern = mapped;
@@ -47,7 +45,6 @@ export async function runHybridSearch(params: SearchParams): Promise<MatchItem[]
     query: primaryKeyword,
     type: "text",
     filePattern,
-    fileType,
     context: undefined,
   });
 
@@ -66,31 +63,4 @@ export async function runHybridSearch(params: SearchParams): Promise<MatchItem[]
   }
 
   return allMatches;
-}
-
-/**
- * Multi-engine Symbol Search (ctags -> ast-grep -> ripgrep regex heuristic)
- */
-export async function runSymbolSearch(params: SearchParams): Promise<MatchItem[]> {
-  const symbol = (params.query || "").trim();
-  const { symbols } = await searchSymbols({
-    name: symbol,
-    path: params.path,
-    filePattern: params.filePattern,
-    fileType: params.fileType,
-    excludePattern: params.excludePattern,
-    noIgnore: params.noIgnore,
-    exactMatch: params.wordMatch ?? false,
-    maxResults: Math.max(params.limit || 50, 250),
-  });
-
-  return symbols.map((s) => ({
-    file: s.file,
-    startLine: s.line,
-    column: s.column,
-    content: s.signature || `[${s.kind}] ${s.name}`,
-    symbolKind: s.kind,
-    symbolName: s.name,
-    containerName: s.containerName,
-  }));
 }
