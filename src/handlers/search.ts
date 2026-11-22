@@ -12,15 +12,12 @@ import {
 
 export async function handleSearch(params: SearchParams) {
   const projectPath = params.path || ".";
+  const offset = Math.max(1, Math.floor(params.offset || 1));
+  const limit = Math.max(1, Math.floor(params.limit || 50));
 
   // 1. Pagination from Cache
   if (params.searchId) {
-    const cached = readSearchCache(
-      projectPath,
-      params.searchId,
-      params.offset || 1,
-      params.limit || 50
-    );
+    const cached = readSearchCache(projectPath, params.searchId, offset, limit);
 
     if (!cached) {
       return {
@@ -41,6 +38,7 @@ export async function handleSearch(params: SearchParams) {
       params.maxLineLength,
       {
         searchId: params.searchId,
+        offset,
         nextOffset: cached.nextOffset,
         hasMore: cached.hasMore,
       }
@@ -93,18 +91,20 @@ export async function handleSearch(params: SearchParams) {
       matches = await runRipgrepSearch(params);
   }
 
-  const limit = params.limit || 50;
   const totalMatches = matches.length;
+  const startIndex = offset - 1;
+  const endIndex = startIndex + limit;
+  const chunk = matches.slice(startIndex, endIndex);
+  const hasMore = endIndex < totalMatches;
 
-  // On-demand caching if results exceed limit
-  if (totalMatches > limit) {
+  // On-demand caching if results exceed current window or pagination is needed
+  if (totalMatches > limit || offset > 1) {
     const searchId = generateSearchId();
     saveSearchCache(projectPath, searchId, matches, {
       query: params.query,
       type: params.type || "regex",
     });
 
-    const chunk = matches.slice(0, limit);
     const formatted = formatMatchItems(
       chunk,
       totalMatches,
@@ -112,8 +112,9 @@ export async function handleSearch(params: SearchParams) {
       params.maxLineLength,
       {
         searchId,
-        nextOffset: limit + 1,
-        hasMore: true,
+        offset,
+        nextOffset: endIndex + 1,
+        hasMore,
       }
     );
 
@@ -124,7 +125,7 @@ export async function handleSearch(params: SearchParams) {
 
   // Standard direct response (0 cache files created)
   const formatted = formatMatchItems(
-    matches,
+    chunk,
     totalMatches,
     params.outputFormat,
     params.maxLineLength

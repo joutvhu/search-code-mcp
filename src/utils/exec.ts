@@ -9,6 +9,11 @@ export interface ExecResult {
   exitCode: number;
 }
 
+export interface SafeSpawnOptions {
+  timeoutMs?: number;
+  maxBufferBytes?: number;
+}
+
 export type TextEngineName = "rg" | "ugrep" | "git";
 export type AstEngineName = "ast-grep" | "sg";
 export type SymbolEngineName = "ctags" | "ast-grep" | "ripgrep";
@@ -28,7 +33,10 @@ export interface ResolvedSymbolEngine {
   binary: string;
 }
 
-function findWindowsNativeAstGrep(): string | null {
+const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_MAX_BUFFER_BYTES = 16 * 1024 * 1024; // 16 MB
+
+export function findWindowsNativeAstGrep(): string | null {
   if (process.platform !== "win32") return null;
   try {
     const res = spawnSync("where.exe", ["ast-grep"], { encoding: "utf8" });
@@ -46,6 +54,13 @@ function findWindowsNativeAstGrep(): string | null {
       }
     }
   } catch {}
+
+  if (process.env.APPDATA) {
+    const appDataExe = path.join(process.env.APPDATA, "npm", "node_modules", "@ast-grep", "cli", "ast-grep.exe");
+    if (fs.existsSync(appDataExe)) {
+      return appDataExe;
+    }
+  }
   return null;
 }
 
@@ -146,10 +161,6 @@ export async function detectAstEngine(): Promise<ResolvedAstEngine> {
 }
 
 /**
- * Legacy resolver for backward compatibility
- */
-
-/**
  * Detect available symbol search engine (ctags -> ast-grep -> ripgrep heuristic)
  */
 export async function detectSymbolEngine(): Promise<ResolvedSymbolEngine> {
@@ -161,10 +172,10 @@ export async function detectSymbolEngine(): Promise<ResolvedSymbolEngine> {
     return cachedSymbolEngine;
   }
 
-  // 2. Check universal-ctags / ctags
+  // 2. Check Universal Ctags (--output-format=json requires Universal Ctags)
   try {
     const res = await safeSpawn("ctags", ["--version"]);
-    if (res.stdout.includes("Universal Ctags") || res.stdout.includes("Exuberant Ctags")) {
+    if (res.stdout.includes("Universal Ctags")) {
       cachedSymbolEngine = { name: "ctags", binary: "ctags" };
       return cachedSymbolEngine;
     }
@@ -188,45 +199,57 @@ export async function detectSymbolEngine(): Promise<ResolvedSymbolEngine> {
   throw new Error(errorMsg);
 }
 
-export function resolveBinary(name: "rg" | "ast-grep"): string {
-  if (name === "rg") {
-    return process.env.RIPGREP_PATH || "rg";
-  } else {
-    return process.env.AST_GREP_PATH || "ast-grep";
+function quoteWinCmdArg(arg: string): string {
+  if (/[\r\n]/.test(arg)) {
+    throw new Error("Newlines in arguments are not supported when invoking Windows .cmd/.bat shims.");
   }
+  if (/[\s^&|<>()%!"]/.test(arg)) {
+    return `"${arg.replace(/"/g, '""')}"`;
+  }
+  return arg;
 }
 
 /**
- * Execute subprocess safely without shell: true
+ * Execute subprocess safely without shell: true (except unavoidable .cmd/.bat shims on Windows)
  */
 export function safeSpawn(
   executable: string,
   args: string[],
   inputText?: string,
-  cwd?: string
+  cwd?: string,
+  options?: SafeSpawnOptions
 ): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
     const isWindows = process.platform === "win32";
-    let targetCmd = executable;
-    const isBatchScript = isWindows && (targetCmd.toLowerCase().endsWith(".cmd") || targetCmd.toLowerCase().endsWith(".bat"));
+    const targetCmd = executable;
+    const isBatchScript =
+      isWindows && (targetCmd.toLowerCase().endsWith(".cmd") || targetCmd.toLowerCase().endsWith(".bat"));
 
-    // When running batch scripts on Windows, quote arguments containing spaces/special characters
-    const spawnArgs = isBatchScript
-      ? args.map((a) => (/[\s^&|<>"]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a))
-      : args;
+    const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const maxBufferBytes = options?.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES;
 
-    let child: any;
+    let spawnArgs: string[];
+    try {
+      spawnArgs = isBatchScript ? args.map(quoteWinCmdArg) : args;
+    } catch (err) {
+      return reject(err);
+    }
+
+    let child: ReturnType<typeof spawn>;
     try {
       child = spawn(targetCmd, spawnArgs, {
         shell: isBatchScript,
         cwd: cwd || process.cwd(),
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: [inputText !== undefined ? "pipe" : "ignore", "pipe", "pipe"],
       });
     } catch (err: any) {
-      if (isWindows && (err.code === "ENOENT" || err.code === "EINVAL") && !targetCmd.endsWith(".cmd") && !targetCmd.endsWith(".exe")) {
-        safeSpawn(`${targetCmd}.cmd`, args, inputText, cwd)
-          .then(resolve)
-          .catch(() => reject(err));
+      if (
+        isWindows &&
+        (err.code === "ENOENT" || err.code === "EINVAL") &&
+        !targetCmd.endsWith(".cmd") &&
+        !targetCmd.endsWith(".exe")
+      ) {
+        safeSpawn(`${targetCmd}.cmd`, args, inputText, cwd, options).then(resolve).catch(() => reject(err));
         return;
       }
       return reject(err);
@@ -234,53 +257,92 @@ export function safeSpawn(
 
     let stdout = "";
     let stderr = "";
+    let totalBytes = 0;
+    let settled = false;
 
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try {
+        child.kill("SIGTERM");
+      } catch {}
+      reject(new Error(`Command '${executable}' timed out after ${timeoutMs}ms.`));
+    }, timeoutMs);
 
-    child.stdout.on("data", (chunk: string) => {
+    const finishError = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    };
+
+    const finishSuccess = (res: ExecResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(res);
+    };
+
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+
+    child.stdout?.on("data", (chunk: string) => {
+      totalBytes += Buffer.byteLength(chunk, "utf8");
+      if (totalBytes > maxBufferBytes) {
+        try {
+          child.kill("SIGTERM");
+        } catch {}
+        finishError(
+          new Error(
+            `Command '${executable}' output exceeded max buffer (${Math.round(maxBufferBytes / (1024 * 1024))}MB). Narrow your search path or add filePattern/excludePattern.`
+          )
+        );
+        return;
+      }
       stdout += chunk;
     });
 
-    child.stderr.on("data", (chunk: string) => {
+    child.stderr?.on("data", (chunk: string) => {
       stderr += chunk;
     });
 
     child.on("error", (err: any) => {
-      if (isWindows && (err.code === "ENOENT" || err.code === "EINVAL") && !targetCmd.endsWith(".cmd") && !targetCmd.endsWith(".exe")) {
-        // Try fallback to .cmd on Windows if not already tried
-        safeSpawn(`${targetCmd}.cmd`, args, inputText, cwd)
-          .then(resolve)
-          .catch(() => {
-            reject(err);
-          });
+      if (settled) return;
+      clearTimeout(timer);
+      if (
+        isWindows &&
+        (err.code === "ENOENT" || err.code === "EINVAL") &&
+        !targetCmd.endsWith(".cmd") &&
+        !targetCmd.endsWith(".exe")
+      ) {
+        settled = true;
+        safeSpawn(`${targetCmd}.cmd`, args, inputText, cwd, options).then(resolve).catch(() => reject(err));
         return;
       }
+      settled = true;
       reject(err);
     });
 
     child.on("close", (code: number | null) => {
       const exitCode = code ?? 0;
-      // Exit code 0 (success) and 1 (standard "no matches" from rg/ugrep/git-grep/ast-grep) are normal
       if (exitCode === 0) {
-        resolve({ stdout, stderr, exitCode });
+        finishSuccess({ stdout, stderr, exitCode });
       } else if (exitCode === 1) {
-        // Verify it's not a syntax or unrecognized command error
         if (stderr && (stderr.includes("error:") || stderr.includes("Error:") || stderr.includes("not recognized"))) {
           const error = new Error(`Command '${executable}' failed:\n${stderr}`);
           Object.assign(error, { exitCode, stdout, stderr });
-          reject(error);
+          finishError(error);
         } else {
-          resolve({ stdout, stderr, exitCode });
+          finishSuccess({ stdout, stderr, exitCode });
         }
       } else {
         const error = new Error(`Command '${executable}' failed with exit code ${exitCode}:\n${stderr || stdout}`);
         Object.assign(error, { exitCode, stdout, stderr });
-        reject(error);
+        finishError(error);
       }
     });
 
-    if (inputText !== undefined) {
+    if (inputText !== undefined && child.stdin) {
       child.stdin.write(inputText);
       child.stdin.end();
     }

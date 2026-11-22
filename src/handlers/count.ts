@@ -8,6 +8,9 @@ export async function handleCount(params: CountParams) {
       path: params.path,
       query: params.query,
       language: params.language,
+      filePattern: params.filePattern,
+      fileType: params.fileType,
+      excludePattern: params.excludePattern,
       noIgnore: params.noIgnore,
     });
 
@@ -22,7 +25,9 @@ export async function handleCount(params: CountParams) {
         content: [
           {
             type: "text",
-            text: `Found ${matches.length} AST matches across ${Object.keys(fileCounts).length} file(s):\n\n` + lines.join("\n"),
+            text:
+              `Found ${matches.length} AST match(es) across ${Object.keys(fileCounts).length} file(s):\n\n` +
+              (lines.join("\n") || "0 matches"),
           },
         ],
       };

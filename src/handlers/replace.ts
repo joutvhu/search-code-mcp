@@ -4,13 +4,21 @@ import { ReplaceParams } from "../types.js";
 import { runAstGrepRewrite } from "../engines/astgrep.js";
 import { buildUnifiedDiff } from "../utils/formatters.js";
 import { runRipgrepSearch } from "../engines/ripgrep.js";
-import { resolveTarget, toRelativePath, formatOutputPath } from "../utils/paths.js";
+import { resolveTarget, formatOutputPath } from "../utils/paths.js";
 
 export async function handleReplace(params: ReplaceParams) {
   const isDryRun = params.dryRun !== false;
+  const maxLimit = params.maxReplacements ?? 50;
 
   if (params.type === "regex" || params.type === "text") {
-    // Regex/Text replacement via ripgrep discovery + in-memory replacement
+    // Validate regex upfront so invalid JS RegExp fails loudly instead of silently
+    let regex: RegExp;
+    if (params.type === "text") {
+      regex = new RegExp(params.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
+    } else {
+      regex = new RegExp(params.query, "g");
+    }
+
     const matches = await runRipgrepSearch({
       path: params.path,
       query: params.query,
@@ -19,6 +27,7 @@ export async function handleReplace(params: ReplaceParams) {
       fileType: params.fileType,
       excludePattern: params.excludePattern,
       noIgnore: params.noIgnore,
+      caseSensitive: true,
     });
 
     if (matches.length === 0) {
@@ -30,54 +39,109 @@ export async function handleReplace(params: ReplaceParams) {
     const uniqueFiles = Array.from(new Set(matches.map((m) => m.file)));
     const diffs: string[] = [];
     let totalReplaced = 0;
+    let truncatedByLimit = false;
 
     const { basePath } = resolveTarget(params.path);
 
     for (const filePath of uniqueFiles) {
-      if (totalReplaced >= (params.maxReplacements || 50)) break;
+      if (totalReplaced >= maxLimit) {
+        truncatedByLimit = true;
+        break;
+      }
 
-      try {
-        const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
-        const originalContent = fs.readFileSync(absPath, "utf8");
-        const regex =
-          params.type === "text"
-            ? new RegExp(params.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")
-            : new RegExp(params.query, "g");
+      const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
+      const originalContent = fs.readFileSync(absPath, "utf8");
 
-        const modifiedContent = originalContent.replace(regex, params.replacement);
-        if (originalContent !== modifiedContent) {
-          totalReplaced++;
-          const displayPath = formatOutputPath(absPath, basePath);
-          diffs.push(buildUnifiedDiff(displayPath, originalContent, modifiedContent));
-
-          if (!isDryRun) {
-            fs.writeFileSync(absPath, modifiedContent, "utf8");
-          }
+      let fileReplacements = 0;
+      const modifiedContent = originalContent.replace(regex, (...args) => {
+        const fullMatch = args[0] as string;
+        if (totalReplaced + fileReplacements >= maxLimit) {
+          truncatedByLimit = true;
+          return fullMatch;
         }
-      } catch (err) {
-        // Skip unreadable files
+        fileReplacements++;
+
+        if (params.type === "text") {
+          return params.replacement;
+        }
+
+        // Emulate standard String.prototype.replace substitution ($&, $$, $`, $', $1..$n, $<name>)
+        const offset = args[args.length - 2] as number;
+        const input = args[args.length - 1] as string;
+        const maybeGroups = typeof args[args.length - 1] === "object" ? (args[args.length - 1] as Record<string, string>) : undefined;
+        const captureArgs = maybeGroups ? args.slice(1, -3) : args.slice(1, -2);
+        const srcStr = maybeGroups ? (args[args.length - 2] as string) : input;
+        const matchOffset = maybeGroups ? (args[args.length - 3] as number) : offset;
+
+        return params.replacement.replace(/\$(?:\$|&|`|'|\d{1,2}|<([^>]+)>)/g, (token, groupName) => {
+          if (token === "$$") return "$";
+          if (token === "$&") return fullMatch;
+          if (token === "$`") return srcStr.slice(0, matchOffset);
+          if (token === "$'") return srcStr.slice(matchOffset + fullMatch.length);
+          if (groupName) return maybeGroups?.[groupName] ?? "";
+          const idx = parseInt(token.slice(1), 10);
+          if (idx >= 1 && idx <= captureArgs.length) {
+            return captureArgs[idx - 1] ?? "";
+          }
+          return token;
+        });
+      });
+
+      if (fileReplacements > 0 && originalContent !== modifiedContent) {
+        totalReplaced += fileReplacements;
+        const displayPath = formatOutputPath(absPath, basePath);
+        const diff = buildUnifiedDiff(displayPath, originalContent, modifiedContent);
+        if (diff) diffs.push(diff);
+
+        if (!isDryRun) {
+          fs.writeFileSync(absPath, modifiedContent, "utf8");
+        }
       }
     }
 
+    if (totalReplaced === 0) {
+      return {
+        content: [{ type: "text", text: "No matches found to replace." }],
+      };
+    }
+
+    const limitNote = truncatedByLimit
+      ? `\n⚠️ Stopped at maxReplacements safety cap (${maxLimit}). Narrow 'path' or increase 'maxReplacements' for remaining matches.`
+      : "";
+
     const summary = isDryRun
-      ? `🔍 [Dry-Run] Previewing ${totalReplaced} replacement(s) across ${diffs.length} file(s). No files were modified.\n\n`
-      : `✅ Successfully replaced ${totalReplaced} match(es) across ${diffs.length} file(s).\n\n`;
+      ? `🔍 [Dry-Run] Previewing ${totalReplaced} replacement(s) across ${diffs.length} file(s). No files were modified.${limitNote}\n\n`
+      : `✅ Successfully applied ${totalReplaced} replacement(s) across ${diffs.length} file(s).${limitNote}\n\n`;
+
+    const footer = isDryRun ? "\n\n(To apply changes to disk, run again with dryRun: false)" : "";
 
     return {
-      content: [{ type: "text", text: summary + diffs.join("\n\n") }],
+      content: [{ type: "text", text: summary + diffs.join("\n\n") + footer }],
     };
   }
 
   // AST Rewrite mode (ast-grep)
   const result = await runAstGrepRewrite(params);
 
+  if (result.totalMatchesFound === 0 || result.diffs.length === 0) {
+    return {
+      content: [{ type: "text", text: "No AST matches found to replace." }],
+    };
+  }
+
+  const limitNote = result.truncatedByLimit
+    ? `\n⚠️ Capped at maxReplacements (${maxLimit} of ${result.totalMatchesFound} total matches). Narrow 'path' or increase 'maxReplacements' for remaining matches.`
+    : "";
+
   if (isDryRun) {
-    const output = result.stdout.trim() || "No AST matches found to replace.";
     return {
       content: [
         {
           type: "text",
-          text: `🔍 [Dry-Run] AST rewrite preview:\n\n${output}\n\n(To apply changes to disk, run with dryRun: false)`,
+          text:
+            `🔍 [Dry-Run] Previewing ${result.appliedReplacements} AST replacement(s) across ${result.modifiedFiles.length} file(s). No files were modified.${limitNote}\n\n` +
+            result.diffs.join("\n\n") +
+            "\n\n(To apply changes to disk, run again with dryRun: false)",
         },
       ],
     };
@@ -87,7 +151,9 @@ export async function handleReplace(params: ReplaceParams) {
     content: [
       {
         type: "text",
-        text: `✅ AST rewrite applied successfully.\n${result.stdout.trim() || ""}`,
+        text:
+          `✅ Successfully applied ${result.appliedReplacements} AST replacement(s) across ${result.modifiedFiles.length} file(s).${limitNote}\n\n` +
+          result.diffs.join("\n\n"),
       },
     ],
   };

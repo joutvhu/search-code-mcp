@@ -6,17 +6,102 @@ import { SearchParams, CountParams, ListFilesParams } from "../types.js";
 import { resolveTarget, toRelativePath, formatOutputPath } from "../utils/paths.js";
 
 /**
- * Standard output parser for rg, ugrep, and git grep
+ * Convert simple glob pattern (supporting **, *, ?, {a,b}) to RegExp
+ */
+function globToRegExp(glob: string): RegExp {
+  const normalized = glob.replace(/\\/g, "/").trim();
+  let regexStr = "";
+  let i = 0;
+  while (i < normalized.length) {
+    const ch = normalized[i];
+    if (ch === "*") {
+      if (normalized[i + 1] === "*") {
+        if (normalized[i + 2] === "/") {
+          regexStr += "(?:.*/)?";
+          i += 3;
+          continue;
+        }
+        regexStr += ".*";
+        i += 2;
+        continue;
+      }
+      regexStr += "[^/]*";
+    } else if (ch === "?") {
+      regexStr += "[^/]";
+    } else if (ch === "{") {
+      const closeIdx = normalized.indexOf("}", i);
+      if (closeIdx !== -1) {
+        const inner = normalized.slice(i + 1, closeIdx);
+        const parts = inner.split(",").map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+        regexStr += `(?:${parts.join("|")})`;
+        i = closeIdx + 1;
+        continue;
+      }
+      regexStr += "\\{";
+    } else {
+      regexStr += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+    i++;
+  }
+
+  const hasSlash = normalized.includes("/");
+  return hasSlash ? new RegExp(`^${regexStr}$`) : new RegExp(`(?:^|/)${regexStr}$`);
+}
+
+/**
+ * Parse ripgrep --json output unambiguously
+ */
+function parseRgJsonOutput(stdout: string, basePath?: string): MatchItem[] {
+  if (!stdout) return [];
+  const matches: MatchItem[] = [];
+
+  for (const rawLine of stdout.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || !line.startsWith("{")) continue;
+
+    try {
+      const event = JSON.parse(line);
+      if (event.type !== "match" && event.type !== "context") continue;
+
+      const data = event.data;
+      const fileText: string | undefined = data?.path?.text;
+      if (!fileText) continue;
+
+      const lineNumber: number = data.line_number ?? 1;
+      const rawText: string =
+        typeof data.lines?.text === "string"
+          ? data.lines.text.replace(/\r?\n$/, "")
+          : "";
+
+      const lineCount = rawText.includes("\n") ? rawText.split("\n").length : 1;
+
+      matches.push({
+        file: formatOutputPath(fileText, basePath),
+        startLine: lineNumber,
+        ...(lineCount > 1 ? { endLine: lineNumber + lineCount - 1 } : {}),
+        content: rawText,
+        ...(event.type === "context" ? { isContext: true } : {}),
+      });
+    } catch {
+      // Skip malformed JSON line
+    }
+  }
+
+  return matches;
+}
+
+/**
+ * Standard output parser for ugrep and git grep
  */
 function parseGrepOutput(cleanOutput: string, basePath?: string): MatchItem[] {
   if (!cleanOutput) return [];
   const matches: MatchItem[] = [];
-  const lines = cleanOutput.split("\n");
+  const lines = cleanOutput.split(/\r?\n/);
 
   for (const line of lines) {
     if (!line.trim()) continue;
-    // Typical line: "path/to/file.ts:12:content" or "path/to/file.ts:12:34:content"
-    const match = line.match(/^((?:[a-zA-Z]:)?[^:]+):(\d+):(?:\d+:)?(.*)$/);
+    // Match lines: "path/to/file.ts:12:content" or "C:\path\file.ts:12:content"
+    const match = line.match(/^((?:[a-zA-Z]:)?[^:\n]+):(\d+):(?:\d+:)?(.*)$/);
     if (match) {
       matches.push({
         file: formatOutputPath(match[1], basePath),
@@ -24,13 +109,14 @@ function parseGrepOutput(cleanOutput: string, basePath?: string): MatchItem[] {
         content: match[3],
       });
     } else {
-      // Context lines: "path/to/file.ts-12-content"
-      const ctxMatch = line.match(/^((?:[a-zA-Z]:)?[^:-]+)-(\d+)-(?:(?:\d+)-)?(.*)$/);
+      // Context lines: "path/to/file-with-dash.ts-12-content"
+      const ctxMatch = line.match(/^((?:[a-zA-Z]:)?[^:\n]+?)-(\d+)-(?:(?:\d+)-)?(.*)$/);
       if (ctxMatch) {
         matches.push({
           file: formatOutputPath(ctxMatch[1], basePath),
           startLine: parseInt(ctxMatch[2], 10),
           content: ctxMatch[3],
+          isContext: true,
         });
       }
     }
@@ -40,14 +126,16 @@ function parseGrepOutput(cleanOutput: string, basePath?: string): MatchItem[] {
 }
 
 /**
- * 1. ripgrep search implementation
+ * 1. ripgrep search implementation (uses --json for unambiguous path/context parsing)
  */
 async function runRgSearch(binary: string, params: Partial<SearchParams>): Promise<MatchItem[]> {
   const { targetPath, basePath } = resolveTarget(params.path);
-  const args: string[] = ["-n", "-H", "--color", "never"];
+  const args: string[] = ["--json"];
 
   if (params.caseSensitive === true) args.push("-s");
   else if (params.caseSensitive === false) args.push("-i");
+  else args.push("-S"); // Smart-case when caseSensitive is omitted
+
   if (params.multiline) args.push("-U");
   if (params.type === "text") args.push("-F");
   if (params.wordMatch) args.push("-w");
@@ -64,10 +152,10 @@ async function runRgSearch(binary: string, params: Partial<SearchParams>): Promi
 
   if (params.noIgnore) args.push("--no-ignore");
   if (params.includeHidden) args.push("-.");
-  args.push(params.query || "", targetPath);
+  args.push("-e", params.query || "", "--", targetPath);
 
   const result = await safeSpawn(binary, args, undefined, basePath);
-  return parseGrepOutput(stripAnsi(result.stdout).trim(), basePath);
+  return parseRgJsonOutput(result.stdout, basePath);
 }
 
 /**
@@ -79,6 +167,8 @@ async function runUgrepSearch(binary: string, params: Partial<SearchParams>): Pr
 
   if (params.caseSensitive === true) args.push("-s");
   else if (params.caseSensitive === false) args.push("-i");
+  else args.push("-j"); // ugrep smart-case
+
   if (params.type === "text") args.push("-F");
   else args.push("-P"); // PCRE2 regex
   if (params.wordMatch) args.push("-w");
@@ -94,7 +184,7 @@ async function runUgrepSearch(binary: string, params: Partial<SearchParams>): Pr
 
   if (params.noIgnore) args.push("--no-ignore");
   if (params.includeHidden) args.push("-.");
-  args.push(params.query || "", targetPath);
+  args.push("-e", params.query || "", "--", targetPath);
 
   const result = await safeSpawn(binary, args, undefined, basePath);
   return parseGrepOutput(stripAnsi(result.stdout).trim(), basePath);
@@ -105,20 +195,27 @@ async function runUgrepSearch(binary: string, params: Partial<SearchParams>): Pr
  */
 async function runGitGrepSearch(binary: string, params: Partial<SearchParams>): Promise<MatchItem[]> {
   const { targetPath, basePath } = resolveTarget(params.path);
+  const query = params.query || "";
   const args: string[] = ["grep", "--no-index", "-n", "-I", "--color=never"];
+  if (!params.noIgnore) args.push("--exclude-standard");
 
-  if (params.caseSensitive === false) args.push("-i");
+  if (params.caseSensitive === false || (params.caseSensitive === undefined && !/[A-Z]/.test(query))) {
+    args.push("-i");
+  }
   if (params.type === "text") args.push("-F");
-  else args.push("-E"); // Extended POSIX regex
+  else args.push("-E");
   if (params.wordMatch) args.push("-w");
   if (params.context && params.context > 0) args.push("-C", String(params.context));
-  args.push("-e", params.query || "");
+  args.push("-e", query);
 
   const relTarget = toRelativePath(targetPath, basePath);
   const pathspecs: string[] = [];
 
   if (params.filePattern) {
-    const pattern = (relTarget && relTarget !== ".") ? `${relTarget.replace(/[/\\]+$/, "")}/${params.filePattern}` : params.filePattern;
+    const pattern =
+      relTarget && relTarget !== "."
+        ? `${relTarget.replace(/[/\\]+$/, "")}/${params.filePattern}`
+        : params.filePattern;
     pathspecs.push(pattern);
   } else if (relTarget && relTarget !== ".") {
     pathspecs.push(relTarget);
@@ -162,6 +259,7 @@ export async function runRipgrepCount(params: Partial<CountParams>): Promise<{ t
 
   if (engine.name === "git") {
     const args: string[] = ["grep", "--no-index", "-c", "--color=never"];
+    if (!params.noIgnore) args.push("--exclude-standard");
     if (params.type === "text") args.push("-F");
     else args.push("-E");
     args.push("-e", params.query || "");
@@ -169,7 +267,10 @@ export async function runRipgrepCount(params: Partial<CountParams>): Promise<{ t
     const relTarget = toRelativePath(targetPath, basePath);
     const pathspecs: string[] = [];
     if (params.filePattern) {
-      const pattern = (relTarget && relTarget !== ".") ? `${relTarget.replace(/[/\\]+$/, "")}/${params.filePattern}` : params.filePattern;
+      const pattern =
+        relTarget && relTarget !== "."
+          ? `${relTarget.replace(/[/\\]+$/, "")}/${params.filePattern}`
+          : params.filePattern;
       pathspecs.push(pattern);
     } else if (relTarget && relTarget !== ".") {
       pathspecs.push(relTarget);
@@ -191,7 +292,7 @@ export async function runRipgrepCount(params: Partial<CountParams>): Promise<{ t
 
     let total = 0;
     const formattedLines: string[] = [];
-    for (const line of clean.split("\n")) {
+    for (const line of clean.split(/\r?\n/)) {
       if (!line.trim()) continue;
       const parts = line.split(":");
       const countStr = parts.pop();
@@ -203,9 +304,9 @@ export async function runRipgrepCount(params: Partial<CountParams>): Promise<{ t
     return { total, output: formattedLines.join("\n") };
   }
 
-  // rg or ugrep
-  const args: string[] = ["--color", "never"];
-  if (params.countLines || engine.name === "ugrep") args.push("-c");
+  // rg or ugrep (-H ensures filename is always emitted even for a single target file)
+  const args: string[] = ["-H", "--color", "never"];
+  if (params.countLines !== false || engine.name === "ugrep") args.push("-c");
   else args.push("--count-matches");
 
   if (params.type === "text") args.push("-F");
@@ -220,18 +321,19 @@ export async function runRipgrepCount(params: Partial<CountParams>): Promise<{ t
   }
   if (params.noIgnore) args.push("--no-ignore");
 
-  args.push(params.query || "", targetPath);
+  args.push("-e", params.query || "", "--", targetPath);
 
   const result = await safeSpawn(engine.binary, args, undefined, basePath);
   const clean = stripAnsi(result.stdout).trim();
 
   let total = 0;
   const formattedLines: string[] = [];
-  for (const line of clean.split("\n")) {
+  for (const line of clean.split(/\r?\n/)) {
     if (!line.trim()) continue;
-    const parts = line.split(":");
-    const countStr = parts.pop();
-    const file = parts.join(":");
+    const lastColon = line.lastIndexOf(":");
+    if (lastColon === -1) continue;
+    const file = line.slice(0, lastColon);
+    const countStr = line.slice(lastColon + 1).trim();
     const count = parseInt(countStr || "0", 10);
     if (!isNaN(count)) total += count;
     formattedLines.push(`${formatOutputPath(file, basePath)}: ${countStr}`);
@@ -247,6 +349,15 @@ function nativeNodeListFiles(targetDir: string, basePath: string, params: Partia
   const fullPath = path.resolve(targetDir || ".");
   if (!fs.existsSync(fullPath)) return [];
 
+  const includeRegex = params.filePattern ? globToRegExp(params.filePattern) : null;
+  const excludeRegexes = params.excludePattern
+    ? params.excludePattern
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .map(globToRegExp)
+    : [];
+
   const files: string[] = [];
   function walk(current: string) {
     let entries: fs.Dirent[] = [];
@@ -260,14 +371,20 @@ function nativeNodeListFiles(targetDir: string, basePath: string, params: Partia
       if (!params.includeHidden && name.startsWith(".")) continue;
       if (!params.noIgnore && (name === "node_modules" || name === ".git" || name === "dist")) continue;
       const full = path.join(current, name);
+      const rel = toRelativePath(full, basePath);
+      if (excludeRegexes.some((rx) => rx.test(rel))) continue;
+
       if (ent.isDirectory()) {
         walk(full);
       } else if (ent.isFile()) {
-        const formatted = formatOutputPath(full, basePath);
-        if (params.filePattern && !formatted.includes(params.filePattern.replace(/\*/g, ""))) continue;
-        files.push(formatted);
+        if (includeRegex && !includeRegex.test(rel)) continue;
+        files.push(formatOutputPath(full, basePath));
       }
     }
+  }
+
+  if (fs.statSync(fullPath).isFile()) {
+    return [formatOutputPath(fullPath, basePath)];
   }
   walk(fullPath);
   return files;
@@ -293,29 +410,47 @@ export async function runRipgrepListFiles(params: Partial<ListFilesParams>): Pro
       }
       if (params.noIgnore) args.push("--no-ignore");
       if (params.includeHidden) args.push("-.");
-      args.push(targetPath);
+      args.push("--", targetPath);
 
       const result = await safeSpawn(engine.binary, args, undefined, basePath);
       const clean = stripAnsi(result.stdout).trim();
-      if (clean) return clean.split("\n").map((f) => formatOutputPath(f.trim(), basePath)).filter(Boolean);
+      if (!clean) return [];
+      return clean
+        .split(/\r?\n/)
+        .map((f) => formatOutputPath(f.trim(), basePath))
+        .filter(Boolean);
     }
 
     if (engine.name === "git") {
       const args = ["ls-files", "--cached", "--others"];
       if (!params.noIgnore) args.push("--exclude-standard");
       const relTarget = toRelativePath(targetPath, basePath);
-      if (relTarget && relTarget !== ".") args.push(relTarget);
+      if (relTarget && relTarget !== ".") args.push("--", relTarget);
 
       const result = await safeSpawn(engine.binary, args, undefined, basePath);
       const clean = stripAnsi(result.stdout).trim();
-      if (clean) {
-        let list = clean.split("\n").map((f) => formatOutputPath(f.trim(), basePath)).filter(Boolean);
-        if (params.filePattern) {
-          const pat = params.filePattern.replace(/\*/g, "");
-          list = list.filter((f) => f.includes(pat));
-        }
-        return list;
-      }
+      if (!clean) return [];
+
+      const includeRegex = params.filePattern ? globToRegExp(params.filePattern) : null;
+      const excludeRegexes = params.excludePattern
+        ? params.excludePattern
+            .split(",")
+            .map((p) => p.trim())
+            .filter(Boolean)
+            .map(globToRegExp)
+        : [];
+
+      return clean
+        .split(/\r?\n/)
+        .map((f) => f.trim())
+        .filter(Boolean)
+        .filter((f) => {
+          const rel = f.replace(/\\/g, "/");
+          if (includeRegex && !includeRegex.test(rel)) return false;
+          if (excludeRegexes.some((rx) => rx.test(rel))) return false;
+          return true;
+        })
+        .map((f) => formatOutputPath(f, basePath));
     }
   } catch {
     // If CLI engine fails, seamlessly fall back to native Node

@@ -12,7 +12,10 @@
     "start": "node dist/index.js",
     "dev": "tsc -w",
     "check": "tsc --noEmit",
-    "test": "npm run check && npm run build && node --test tests/*.test.mjs"
+    "test": "npm run check && npm run build && node scripts/test.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",

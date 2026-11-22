@@ -56,8 +56,9 @@ export function getWorkspaceRoot(): string {
  * Walk up directory tree to find project root (containing .git, package.json, Cargo.toml, etc.)
  */
 export function findProjectRoot(startPath: string): string {
+  const resolved = path.resolve(startPath);
+  let current = resolved;
   try {
-    let current = path.resolve(startPath);
     if (fs.existsSync(current) && fs.statSync(current).isFile()) {
       current = path.dirname(current);
     }
@@ -78,7 +79,7 @@ export function findProjectRoot(startPath: string): string {
       dir = parent;
     }
   } catch {}
-  return path.resolve(startPath);
+  return current;
 }
 
 /**
@@ -96,10 +97,6 @@ export function resolveTarget(inputPath?: string): { targetPath: string; basePat
   if (path.isAbsolute(inputPath)) {
     const absTarget = path.resolve(inputPath);
     const projRoot = findProjectRoot(absTarget);
-    // If workspace root wasn't explicitly configured and we found a project root, remember it
-    if (!configuredWorkspaceRoot && !process.env.WORKSPACE_ROOT && !process.env.PROJECT_ROOT) {
-      setWorkspaceRoot(projRoot);
-    }
     return { targetPath: absTarget, basePath: projRoot };
   }
 

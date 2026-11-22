@@ -171,7 +171,8 @@ export async function runEngineCli(): Promise<void> {
   const ugrepVer = checkToolVersion("ugrep");
   const gitVer = checkToolVersion("git");
   const astVer = checkToolVersion("ast-grep") || checkToolVersion("sg");
-  const ctagsVer = checkToolVersion("ctags");
+  const rawCtagsVer = checkToolVersion("ctags");
+  const ctagsVer = rawCtagsVer && rawCtagsVer.includes("Universal Ctags") ? rawCtagsVer : null;
 
   console.log("[Text Search Engines]");
   console.log(`  ${rgVer ? "✔" : "❌"} ripgrep (rg)      : ${rgVer || "Not found"}`);
@@ -202,7 +203,7 @@ export async function runEngineCli(): Promise<void> {
     missingOptions.push({ label: `Install ast-grep (${inst.desc})`, tool: "ast-grep" });
   }
 
-  if (!rgVer && !gitVer) {
+  if (!rgVer) {
     const inst = getInstallCommand("ripgrep");
     missingOptions.push({ label: `Install ripgrep (${inst.desc})`, tool: "ripgrep" });
   }

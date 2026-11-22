@@ -1,4 +1,4 @@
-import { FindSymbolsParams, SymbolItem } from "../types.js";
+import { FindSymbolsParams } from "../types.js";
 import { searchSymbols } from "../engines/symbols.js";
 import { truncateLine } from "../utils/formatters.js";
 

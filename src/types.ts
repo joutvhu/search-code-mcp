@@ -22,32 +22,109 @@ export type OutputFormat = z.infer<typeof OutputFormatSchema>;
 
 export const SearchSchema = z.object({
   // Cache pagination parameters
-  searchId: z.string().optional().describe("Previous search result ID to view remaining results instantly without re-scanning"),
-  offset: z.number().optional().default(1).describe("Starting index for pagination (1-based, default: 1)"),
-  limit: z.number().optional().default(50).describe("Maximum matches to return for this chunk (default: 50)"),
+  searchId: z
+    .string()
+    .optional()
+    .describe(
+      "Pagination ID (e.g. 's_a1b2c3d4') returned by a previous search when results exceeded 'limit'. When provided, omit 'query' and pass 'offset'/'limit' to read cached results instantly."
+    ),
+  offset: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .default(1)
+    .describe("1-based starting match index for pagination (default: 1)."),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .default(50)
+    .describe("Maximum matches to return per page (1-500, default: 50)."),
 
   // Fresh search parameters
-  query: z.string().optional().describe("Search query: plain text, regex, AST pattern, or YAML rule"),
-  path: z.string().optional().default(".").describe("Directory or file to search in. Accepts relative or absolute paths (default: '.')"),
-  type: SearchTypeSchema.optional().default("regex").describe("Search engine/type: 'regex' (default), 'text', 'ast', 'ast_rule', 'hybrid', 'symbol'"),
+  query: z
+    .string()
+    .optional()
+    .describe(
+      "Required for a new search (omit when using 'searchId'). Interpretation depends on 'type': PCRE2/Rust regex ('regex'), literal substring ('text'), ast-grep code pattern with $VAR / $$$ARGS ('ast'/'hybrid'), YAML rule with id/language/rule ('ast_rule'), or symbol name ('symbol')."
+    ),
+  path: z
+    .string()
+    .optional()
+    .default(".")
+    .describe("File or directory to search in (relative to workspace root or absolute; default: '.')."),
+  type: SearchTypeSchema.optional()
+    .default("regex")
+    .describe(
+      "Search mode: 'regex' (default, ripgrep regex), 'text' (exact literal match), 'ast' (structural AST pattern), 'ast_rule' (YAML rule with relational checks like inside/has/not), 'hybrid' (ripgrep pre-filter + ast-grep for large repos), 'symbol' (symbol declarations)."
+    ),
 
   // File filtering & Gitignore
-  filePattern: z.string().optional().describe("Glob pattern to filter files, e.g. '*.{ts,tsx}' or '!**/*.test.ts'"),
-  fileType: z.string().optional().describe("Ripgrep file type filter, e.g. 'ts', 'py', 'rust', 'json'"),
-  excludePattern: z.string().optional().describe("Pattern to exclude, e.g. '**/dist/**', '**/*.spec.ts'"),
-  noIgnore: z.boolean().optional().default(false).describe("If true, do NOT respect .gitignore (search ignored files). Default is false (respects .gitignore)"),
+  filePattern: z
+    .string()
+    .optional()
+    .describe("Glob pattern(s) to include, comma-separated, e.g. '*.{ts,tsx}' or 'src/**/*.py'."),
+  fileType: z
+    .string()
+    .optional()
+    .describe("File type shorthand, e.g. 'ts', 'js', 'py', 'rust', 'go', 'java', 'json'."),
+  excludePattern: z
+    .string()
+    .optional()
+    .describe("Comma-separated glob patterns to exclude, e.g. '**/dist/**,**/*.test.ts'."),
+  noIgnore: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If true, also search files ignored by .gitignore. Default: false (respects .gitignore)."),
 
   // Ripgrep options (for 'regex', 'text', 'hybrid')
-  caseSensitive: z.boolean().optional().describe("Match case sensitively. If omitted, smart-case is used"),
-  context: z.number().optional().describe("Number of context lines before and after match (-C)"),
-  wordMatch: z.boolean().optional().describe("Match whole words only (-w)"),
-  multiline: z.boolean().optional().describe("Match regex across multiple lines (-U)"),
-  includeHidden: z.boolean().optional().describe("Search hidden files and folders (-.)"),
+  caseSensitive: z
+    .boolean()
+    .optional()
+    .describe("[regex/text/hybrid] Force case-sensitive (true) or case-insensitive (false). Omitting uses smart-case (insensitive unless query has uppercase)."),
+  context: z
+    .number()
+    .int()
+    .min(0)
+    .max(20)
+    .optional()
+    .describe("[regex/text only] Number of context lines before and after each match (0-20)."),
+  wordMatch: z
+    .boolean()
+    .optional()
+    .describe("[regex/text/symbol] Match whole words only (or exact symbol name in 'symbol' mode)."),
+  multiline: z
+    .boolean()
+    .optional()
+    .describe("[regex/text only] Allow pattern to match across multiple lines."),
+  includeHidden: z
+    .boolean()
+    .optional()
+    .describe("[regex/text only] Include hidden dotfiles and dot-directories."),
 
-  // ast-grep options (for 'ast', 'ast_rule', 'hybrid', 'symbol')
-  language: z.string().optional().describe("Target language (e.g. 'typescript', 'python'). If omitted, auto-detected from file extension"),
-  outputFormat: OutputFormatSchema.optional().default("content").describe("Output format: 'content' (default), 'compact' (file:line only), 'files_only', 'json'"),
-  maxLineLength: z.number().optional().default(500).describe("Max characters per line before truncating long lines (default: 500)"),
+  // ast-grep & output options
+  language: z
+    .string()
+    .optional()
+    .describe(
+      "[ast/hybrid only] Target language (e.g. 'typescript', 'tsx', 'javascript', 'python', 'rust', 'go', 'java'). Auto-detected from extension when 'path' is a single file; pass explicitly when searching a directory to avoid multi-language ambiguity."
+    ),
+  outputFormat: OutputFormatSchema.optional()
+    .default("content")
+    .describe(
+      "Output format: 'content' (default, file:line + full match text), 'compact' (file:line: first-line snippet), 'files_only' (unique file paths), 'json' (structured JSON)."
+    ),
+  maxLineLength: z
+    .number()
+    .int()
+    .min(50)
+    .optional()
+    .default(500)
+    .describe("Max characters per output line before truncation (min 50, default: 500)."),
 });
 
 export type SearchParams = z.infer<typeof SearchSchema>;
@@ -56,51 +133,156 @@ export const ReplaceTypeSchema = z.enum(["ast", "regex", "text"]);
 export type ReplaceType = z.infer<typeof ReplaceTypeSchema>;
 
 export const ReplaceSchema = z.object({
-  path: z.string().optional().default(".").describe("Directory or file to perform replacement in. Accepts relative or absolute paths (default: '.')"),
-  query: z.string().describe("Target search pattern to replace (AST pattern or regex)"),
-  replacement: z.string().describe("Replacement string or AST rewrite pattern"),
-  type: ReplaceTypeSchema.optional().default("ast").describe("Replacement engine: 'ast' (default structural rewrite), 'regex', 'text'"),
-  dryRun: z.boolean().optional().default(true).describe("If true (default), outputs unified diff preview without modifying files on disk"),
-  maxReplacements: z.number().optional().default(50).describe("Safety guardrail: maximum number of matches to replace (default: 50)"),
-  filePattern: z.string().optional().describe("Glob pattern to filter files"),
-  fileType: z.string().optional().describe("File type filter"),
-  excludePattern: z.string().optional().describe("Glob pattern to exclude"),
-  noIgnore: z.boolean().optional().default(false).describe("Whether to search inside gitignored files"),
-  language: z.string().optional().describe("Programming language for AST mode (auto-detected if omitted)"),
+  path: z
+    .string()
+    .optional()
+    .default(".")
+    .describe("File or directory to modify (relative or absolute; default: '.'). Narrow to a subdirectory for large refactors."),
+  query: z
+    .string()
+    .describe(
+      "Pattern to match: ast-grep pattern with $VAR/$$$ARGS ('ast'), JavaScript RegExp ('regex'), or exact literal string ('text')."
+    ),
+  replacement: z
+    .string()
+    .describe(
+      "Replacement template: reuse captured meta-variables like $VAR/$$$ARGS ('ast'), $1/$& capture groups ('regex'), or exact literal text ('text')."
+    ),
+  type: ReplaceTypeSchema.optional()
+    .default("ast")
+    .describe(
+      "Replacement engine (NOTE: defaults to 'ast', unlike 'search' which defaults to 'regex'). Use 'ast' for structural rewrites, 'regex' for JS regex replacement, or 'text' for literal string replacement."
+    ),
+  dryRun: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe("Safety preview mode. Default true: returns unified diff without modifying files. Set false only after inspecting the diff."),
+  maxReplacements: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .default(50)
+    .describe("Safety guardrail: maximum number of individual match occurrences to replace per call (default: 50)."),
+  filePattern: z
+    .string()
+    .optional()
+    .describe("Glob pattern(s) to include, comma-separated, e.g. '*.ts' or 'src/**/*.tsx'."),
+  fileType: z
+    .string()
+    .optional()
+    .describe("File type filter, e.g. 'ts', 'py', 'go', 'rust'."),
+  excludePattern: z
+    .string()
+    .optional()
+    .describe("Comma-separated glob patterns to exclude, e.g. '**/dist/**,**/*.test.ts'."),
+  noIgnore: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If true, also process gitignored files. Default: false."),
+  language: z
+    .string()
+    .optional()
+    .describe("[ast only] Target language (e.g. 'typescript', 'python'). Auto-detected when 'path' is a single file; recommended when 'path' is a directory."),
 });
 
 export type ReplaceParams = z.infer<typeof ReplaceSchema>;
 
 export const CountSchema = z.object({
-  path: z.string().optional().default(".").describe("Directory or file to count matches in. Accepts relative or absolute paths (default: '.')"),
-  query: z.string().describe("Search pattern to count"),
-  type: z.enum(["regex", "text", "ast"]).optional().default("regex").describe("Engine mode: 'regex' (default), 'text', 'ast'"),
-  filePattern: z.string().optional().describe("Glob pattern to filter files"),
-  fileType: z.string().optional().describe("File type filter"),
-  excludePattern: z.string().optional().describe("Glob pattern to exclude"),
-  noIgnore: z.boolean().optional().default(false).describe("Whether to count inside gitignored files"),
-  countLines: z.boolean().optional().default(true).describe("Count matching lines (true) or total occurrences (false)"),
-  perFile: z.boolean().optional().default(false).describe("If true, shows breakdown of matches per file"),
-  language: z.string().optional().describe("Language for AST mode"),
+  path: z
+    .string()
+    .optional()
+    .default(".")
+    .describe("File or directory to count matches in (relative or absolute; default: '.')."),
+  query: z.string().describe("Pattern to count (regex, literal text, or AST pattern)."),
+  type: z
+    .enum(["regex", "text", "ast"])
+    .optional()
+    .default("regex")
+    .describe("Counting engine: 'regex' (default), 'text' (literal), or 'ast' (structural pattern)."),
+  filePattern: z
+    .string()
+    .optional()
+    .describe("Glob pattern(s) to include, comma-separated, e.g. '*.{ts,tsx}'."),
+  fileType: z
+    .string()
+    .optional()
+    .describe("File type filter, e.g. 'ts', 'py', 'rust'."),
+  excludePattern: z
+    .string()
+    .optional()
+    .describe("Comma-separated glob patterns to exclude, e.g. '**/dist/**,**/*.spec.ts'."),
+  noIgnore: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If true, include gitignored files. Default: false."),
+  countLines: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe("[regex/text only] If true (default), counts matching lines; if false, counts total individual occurrences."),
+  perFile: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If true, returns match counts broken down per file."),
+  language: z
+    .string()
+    .optional()
+    .describe("[ast only] Target language (e.g. 'typescript', 'python'). Recommended when 'path' is a directory."),
 });
 
 export type CountParams = z.infer<typeof CountSchema>;
 
 export const DumpTreeSchema = z.object({
-  code: z.string().describe("Code snippet or query pattern to inspect"),
-  language: z.string().describe("Programming language of the code (e.g. 'typescript', 'python', 'rust')"),
-  format: z.enum(["cst", "ast", "pattern"]).optional().default("cst").describe("Tree dump format: 'cst' (concrete syntax tree), 'ast', or 'pattern'"),
+  code: z
+    .string()
+    .describe("Short representative code snippet (2-5 lines) or an ast-grep pattern (when format='pattern') to inspect."),
+  language: z
+    .string()
+    .describe("Tree-sitter language name, e.g. 'typescript', 'tsx', 'javascript', 'python', 'rust', 'go', 'java'."),
+  format: z
+    .enum(["cst", "ast", "pattern"])
+    .optional()
+    .default("cst")
+    .describe(
+      "Tree format: 'cst' (default, full concrete syntax tree with punctuation), 'ast' (named AST nodes only—best for finding 'kind:' names for ast_rule), 'pattern' (shows how ast-grep parses your pattern with $VAR/$$$)."
+    ),
 });
 
 export type DumpTreeParams = z.infer<typeof DumpTreeSchema>;
 
 export const ListFilesSchema = z.object({
-  path: z.string().optional().default(".").describe("Directory to list files in. Accepts relative or absolute paths (default: '.')"),
-  filePattern: z.string().optional().describe("Glob pattern to filter files"),
-  fileType: z.string().optional().describe("File type filter"),
-  excludePattern: z.string().optional().describe("Glob pattern to exclude"),
-  noIgnore: z.boolean().optional().default(false).describe("Whether to list gitignored files"),
-  includeHidden: z.boolean().optional().default(false).describe("Include hidden files and directories"),
+  path: z
+    .string()
+    .optional()
+    .default(".")
+    .describe("Directory to list files in (relative or absolute; default: '.')."),
+  filePattern: z
+    .string()
+    .optional()
+    .describe("Glob pattern to include, e.g. '*.{ts,tsx}' or '**/*.config.js'."),
+  fileType: z
+    .string()
+    .optional()
+    .describe("Ripgrep file type filter, e.g. 'ts', 'py', 'rust', 'json'."),
+  excludePattern: z
+    .string()
+    .optional()
+    .describe("Comma-separated glob patterns to exclude, e.g. '**/dist/**,**/*.test.ts'."),
+  noIgnore: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If true, include files ignored by .gitignore. Default: false."),
+  includeHidden: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If true, include hidden dotfiles and dot-directories. Default: false."),
 });
 
 export type ListFilesParams = z.infer<typeof ListFilesSchema>;
@@ -132,16 +314,55 @@ export interface SymbolItem {
 }
 
 export const FindSymbolsSchema = z.object({
-  name: z.string().optional().default("").describe("Symbol name or substring pattern to find (leave empty to list all symbols in target path)"),
-  path: z.string().optional().default(".").describe("File or directory to search symbols in. Accepts relative or absolute paths (default: '.')"),
-  kinds: z.array(SymbolKindSchema).optional().describe("Filter by symbol kinds: 'function', 'class', 'interface', 'method', 'variable', 'type', 'struct', 'enum', 'trait', 'module'"),
-  exactMatch: z.boolean().optional().default(false).describe("If true, only match exact symbol name. If false (default), matches prefix or substring"),
-  filePattern: z.string().optional().describe("Glob pattern to filter files, e.g. '*.ts' or '*.py'"),
-  fileType: z.string().optional().describe("File type filter, e.g. 'ts', 'py', 'rust', 'go'"),
-  excludePattern: z.string().optional().describe("Glob pattern to exclude, e.g. '**/node_modules/**', '**/dist/**'"),
-  noIgnore: z.boolean().optional().default(false).describe("Whether to search inside gitignored files"),
-  maxResults: z.number().optional().default(100).describe("Maximum number of symbols to return (default: 100)"),
-  outputFormat: z.enum(["table", "json", "compact"]).optional().default("table").describe("Output format: 'table' (default markdown table), 'json', or 'compact' (file:line: [kind] name)"),
+  name: z
+    .string()
+    .optional()
+    .default("")
+    .describe("Symbol name or substring to match (case-insensitive unless exactMatch=true). Leave empty ('') with a file or folder 'path' to list all symbols as an outline."),
+  path: z
+    .string()
+    .optional()
+    .default(".")
+    .describe("File or directory to inspect (relative or absolute; default: '.'). Pass a single file path with empty 'name' to get that file's symbol outline."),
+  kinds: z
+    .array(SymbolKindSchema)
+    .optional()
+    .describe("Optional filter by symbol kinds: 'function', 'class', 'interface', 'method', 'variable', 'type', 'struct', 'enum', 'trait', 'module', 'other'."),
+  exactMatch: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If true, matches exact symbol name; if false (default), matches substring."),
+  filePattern: z
+    .string()
+    .optional()
+    .describe("Glob pattern to filter files, e.g. '*.ts' or '*.{ts,tsx}'."),
+  fileType: z
+    .string()
+    .optional()
+    .describe("File type filter, e.g. 'ts', 'py', 'rust', 'go'."),
+  excludePattern: z
+    .string()
+    .optional()
+    .describe("Comma-separated glob patterns to exclude, e.g. '**/node_modules/**,**/dist/**'."),
+  noIgnore: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If true, also search inside gitignored files. Default: false."),
+  maxResults: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .default(100)
+    .describe("Maximum number of symbols to return (1-500, default: 100)."),
+  outputFormat: z
+    .enum(["table", "json", "compact"])
+    .optional()
+    .default("table")
+    .describe("Output format: 'table' (default markdown table), 'json', or 'compact' (file:line: [kind] name: signature)."),
 });
 
 export type FindSymbolsParams = z.infer<typeof FindSymbolsSchema>;

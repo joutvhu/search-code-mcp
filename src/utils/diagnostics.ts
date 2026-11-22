@@ -1,4 +1,4 @@
-import { safeSpawn } from "./exec.js";
+import { safeSpawn, findWindowsNativeAstGrep } from "./exec.js";
 
 export interface SystemCapabilities {
   text: boolean;
@@ -15,36 +15,56 @@ export async function probeSystemCapabilities(): Promise<SystemCapabilities> {
   if (cachedCaps) return cachedCaps;
 
   let text = false;
-  try {
-    await safeSpawn("rg", ["--version"]);
-    text = true;
-  } catch {
+  if (process.env.RIPGREP_PATH) {
     try {
-      await safeSpawn("ugrep", ["--version"]);
+      await safeSpawn(process.env.RIPGREP_PATH, ["--version"]);
+      text = true;
+    } catch {}
+  }
+  if (!text) {
+    try {
+      await safeSpawn("rg", ["--version"]);
       text = true;
     } catch {
       try {
-        await safeSpawn("git", ["--version"]);
+        await safeSpawn("ugrep", ["--version"]);
         text = true;
-      } catch {}
+      } catch {
+        try {
+          await safeSpawn("git", ["--version"]);
+          text = true;
+        } catch {}
+      }
     }
   }
 
   let ast = false;
-  try {
-    await safeSpawn("ast-grep", ["--version"]);
-    ast = true;
-  } catch {
+  if (process.env.AST_GREP_PATH) {
     try {
-      await safeSpawn("sg", ["--version"]);
+      await safeSpawn(process.env.AST_GREP_PATH, ["--version"]);
       ast = true;
     } catch {}
   }
+  if (!ast && process.platform === "win32" && findWindowsNativeAstGrep()) {
+    ast = true;
+  }
+  if (!ast) {
+    try {
+      await safeSpawn("ast-grep", ["--version"]);
+      ast = true;
+    } catch {
+      try {
+        await safeSpawn("sg", ["--version"]);
+        ast = true;
+      } catch {}
+    }
+  }
 
   let symbol = false;
+  const ctagsBin = process.env.CTAGS_PATH || "ctags";
   try {
-    const res = await safeSpawn("ctags", ["--version"]);
-    if (res.stdout.includes("Universal Ctags") || res.stdout.includes("Exuberant Ctags")) {
+    const res = await safeSpawn(ctagsBin, ["--version"]);
+    if (res.stdout.includes("Universal Ctags")) {
       symbol = true;
     }
   } catch {}
